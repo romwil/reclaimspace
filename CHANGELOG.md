@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.0] - 2026-05-18
+
+### Added
+
+- Web UI (FastAPI) for settings, background scan jobs, and report viewing.
+- Persistent `settings.json` under `DATA_DIR` (default `/config`), merged with container env overrides.
+- Docker image, `docker-compose.yml`, and Unraid Community Applications template (`unraid/reclaimspace.xml`).
+- `reclaimspace-web` entry point and `python -m reclaimspace.web` server on port 8777.
+
 ## [1.0.0] - 2026-05-18
 
 ### Added

@@ -1,4 +1,9 @@
 .env
+config/settings.json
+config/reports/
+build/
+dist/
+*.egg-info/
 .venv/
 __pycache__/
 *.py[cod]

@@ -1,0 +1,16 @@
+{
+  "plex_url": "http://10.0.0.10:32400",
+  "plex_token": "",
+  "plex_movie_section": "",
+  "plex_tv_section": "",
+  "radarr_url": "http://10.0.0.10:7878",
+  "radarr_api_key": "",
+  "sonarr_url": "http://10.0.0.10:8989",
+  "sonarr_api_key": "",
+  "movies_root": "/media/movies",
+  "tv_root": "/media/tv",
+  "quarantine_root": "/quarantine",
+  "path_mappings": "/data/media/movies=/media/movies;/movies=/media/movies",
+  "tv_path_mappings": "/data/media/tv=/media/tv;/tv=/media/tv",
+  "tv_page_size": 500
+}

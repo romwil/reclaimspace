@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reclaimspace</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">RS</div>
+        <div>
+          <h1>Reclaimspace</h1>
+          <p>Quarantine Plex duplicates · protect Radarr &amp; Sonarr files</p>
+        </div>
+      </div>
+      <div id="health" class="health-pill" role="status">
+        <span class="health-dot"></span>
+        <span class="health-text">Checking…</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card card-scan" aria-labelledby="scan-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="scan-heading">Run scan</h2>
+            <p class="card-subtitle">Dry run first, then quarantine when counts look right.</p>
+          </div>
+        </div>
+        <div class="scan-panel">
+          <label class="field">
+            <span class="field-label">Library</span>
+            <select id="scan-media-type" class="input">
+              <option value="movies">Movies · Radarr</option>
+              <option value="tv">TV shows · Sonarr</option>
+            </select>
+          </label>
+          <div class="scan-actions">
+            <button type="button" data-mode="dry_run" class="btn btn-scan dry scan-btn">
+              <span class="btn-icon" aria-hidden="true">◎</span>
+              Dry run
+            </button>
+            <button type="button" data-mode="quarantine" class="btn btn-scan danger scan-btn">
+              <span class="btn-icon" aria-hidden="true">⇢</span>
+              Quarantine
+            </button>
+          </div>
+        </div>
+        <p class="safety-note">
+          <strong>Safe by design:</strong> nothing is deleted. Quarantine moves files to a timestamped folder with a rollback manifest.
+        </p>
+        <p id="scan-status" class="toast-area" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card" aria-labelledby="jobs-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="jobs-heading">Recent jobs</h2>
+            <p class="card-subtitle">Click a finished job to open its report.</p>
+          </div>
+          <button type="button" id="refresh-jobs" class="btn ghost btn-sm" title="Refresh jobs">↻</button>
+        </div>
+        <div id="jobs-list" class="jobs-list" role="list"></div>
+      </section>
+
+      <section class="card span-2 card-reports" aria-labelledby="reports-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="reports-heading">Reports</h2>
+            <p class="card-subtitle">JSON output from dry runs and quarantine runs.</p>
+          </div>
+          <div class="actions">
+            <a id="download-report" class="btn ghost btn-sm hidden" href="#" download>Download</a>
+            <button type="button" id="refresh-reports" class="btn ghost btn-sm" title="Refresh reports">↻</button>
+          </div>
+        </div>
+        <div class="reports-layout">
+          <div class="reports-sidebar">
+            <div id="reports-list" class="reports-list" role="list"></div>
+          </div>
+          <div class="report-pane">
+            <div id="report-summary" class="report-summary hidden"></div>
+            <pre id="report-viewer" class="report-viewer" tabindex="0">Select a report to inspect results.</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="card span-2 card-config" aria-labelledby="config-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="config-heading">Configuration</h2>
+            <p class="card-subtitle">Saved to <code>settings.json</code> in your config volume.</p>
+          </div>
+          <div class="actions">
+            <button type="button" id="load-plex-sections" class="btn secondary btn-sm">Plex libraries</button>
+            <button type="button" id="save-settings" class="btn primary btn-sm">Save</button>
+          </div>
+        </div>
+
+        <div id="plex-sections" class="plex-sections hidden" role="region" aria-label="Plex libraries"></div>
+
+        <form id="settings-form" class="settings-sections"></form>
+        <p id="settings-status" class="toast-area" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Files outside your library root or without a managed match are marked <em>needs review</em> and are not moved automatically.</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>reclaimspace</Name>
+  <Repository>romwil/reclaimspace</Repository>
+  <Registry>https://hub.docker.com/r/romwil/reclaimspace</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/romwil/reclaimspace/issues</Support>
+  <Project>https://github.com/romwil/reclaimspace</Project>
+  <Overview>
+    Web UI to find Plex duplicate media files and quarantine copies not managed by Radarr or Sonarr.
+    Dry-run scans write JSON reports; quarantine moves files to a timestamped folder with a rollback manifest.
+  </Overview>
+  <Category>Tools:Utilities MediaServer:Other</Category>
+  <WebUI>http://[IP]:[PORT:8777]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/romwil/reclaimspace/main/unraid/reclaimspace.xml</TemplateURL>
+  <Config Name="Web UI port" Target="8777" Default="8777" Mode="tcp" Description="Reclaimspace web interface" Type="Port" Display="always" Required="true" Mask="false">8777</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/reclaimspace/config" Mode="rw" Description="Settings (settings.json) and scan reports" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/reclaimspace/config</Config>
+  <Config Name="Movies library" Target="/media/movies" Default="/mnt/user/data/media/movies" Mode="rw" Description="Host path to movie files (must match Movies root in settings)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/movies</Config>
+  <Config Name="TV library" Target="/media/tv" Default="/mnt/user/data/media/tv" Mode="rw" Description="Host path to TV files (must match TV root in settings)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/tv</Config>
+  <Config Name="Quarantine" Target="/quarantine" Default="/mnt/user/data/quarantine" Mode="rw" Description="Where quarantined files are moved" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/quarantine</Config>
+  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional: Plex base URL (also editable in web UI)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional: Plex token" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Optional: Radarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Optional: Radarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="SONARR_URL" Target="SONARR_URL" Default="" Mode="" Description="Optional: Sonarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Mode="" Description="Optional: Sonarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="MOVIES_ROOT" Target="MOVIES_ROOT" Default="/media/movies" Mode="" Description="Movies root inside container (match Movies library mount)" Type="Variable" Display="advanced" Required="false" Mask="false">/media/movies</Config>
+  <Config Name="TV_ROOT" Target="TV_ROOT" Default="/media/tv" Mode="" Description="TV root inside container" Type="Variable" Display="advanced" Required="false" Mask="false">/media/tv</Config>
+  <Config Name="QUARANTINE_ROOT" Target="QUARANTINE_ROOT" Default="/quarantine" Mode="" Description="Quarantine root inside container" Type="Variable" Display="advanced" Required="false" Mask="false">/quarantine</Config>
+</Container>

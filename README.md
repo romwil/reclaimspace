@@ -6,6 +6,7 @@ Plex sometimes indexes more than one file per movie or episode (leftovers after 
 
 ## Features
 
+- **Web UI (Docker)** — configure services, run dry-run or quarantine scans, view JSON reports
 - **Movies** — Plex + Radarr, default command
 - **TV** — Plex (paged episode scan) + Sonarr (current `episodeFileId` only)
 - **Dry run by default** — JSON reports before any file moves
@@ -14,12 +15,32 @@ Plex sometimes indexes more than one file per movie or episode (leftovers after 
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.10+ (CLI) or Docker (recommended on Unraid)
 - Network access to Plex and Radarr (movies) and/or Sonarr (TV)
 - API tokens for each service you use
 - Read access to your media roots; write access to `QUARANTINE_ROOT` when quarantining
 
-No third-party Python dependencies (stdlib only).
+CLI uses stdlib only. The web UI requires optional dependencies (`pip install ".[web]"`) or the published Docker image.
+
+## Docker / Unraid (recommended)
+
+Unraid often has Docker without the Compose plugin. Use the helper script:
+
+```bash
+cd /mnt/user/appdata/reclaimspace
+chmod +x docker-run.sh docker-stop.sh
+mkdir -p config
+cp -n config/settings.example.json config/settings.json  # first run only
+./docker-run.sh
+```
+
+This reads API keys from `.env`, builds the image, and starts the container on port **8777**. Web UI settings are saved to `config/settings.json`, which is gitignored — never commit that file.
+
+If your server has Compose v2 (`docker compose`) or v1 (`docker-compose`), you can use `docker-compose.yml` instead.
+
+Open **http://your-server:8777/** — save settings, run a dry run, review reports, then quarantine when ready.
+
+See [docs/DOCKER.md](docs/DOCKER.md) for volume paths, Unraid Community Applications template (`unraid/reclaimspace.xml`), and security notes.
 
 ## Quick start
 
@@ -99,10 +120,17 @@ Adjust host paths to match your server. Both prefixes for a library must resolve
 ```text
 reclaimspace/
   media_duplicates.py   # CLI and core logic
+  config_store.py       # Persistent settings (web)
+  runner.py             # Scan API for web jobs
+  web/                  # FastAPI app and static UI
 tests/
 docs/
   CONFIGURATION.md
   USAGE.md
+  DOCKER.md
+Dockerfile
+docker-compose.yml
+unraid/reclaimspace.xml # Unraid CA template
 .env.example
 ```
 

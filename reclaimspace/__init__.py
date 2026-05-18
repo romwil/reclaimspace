@@ -1,3 +1,5 @@
 """Reclaim disk space from Plex duplicates not managed by Radarr or Sonarr."""
 
-__version__ = "1.0.0"
+from reclaimspace._version import __version__
+
+__all__ = ["__version__"]

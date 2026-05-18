@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "reclaimspace"
-version = "1.0.0"
+version = "1.1.0"
 description = "Safely quarantine Plex media duplicates not managed by Radarr or Sonarr."
 readme = "README.md"
 license = { text = "MIT" }
@@ -20,6 +24,13 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/romwil/reclaimspace"
 Repository = "https://github.com/romwil/reclaimspace"
@@ -27,6 +38,11 @@ Issues = "https://github.com/romwil/reclaimspace/issues"
 
 [project.scripts]
 media-duplicates = "reclaimspace.media_duplicates:main"
+reclaimspace-web = "reclaimspace.web.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["reclaimspace*"]
 
 [tool.unittest]
 testpaths = ["tests"]

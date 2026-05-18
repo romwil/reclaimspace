@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-__version__ = "1.0.0"
-
 import argparse
 import json
 import os
@@ -20,6 +18,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from reclaimspace._version import __version__
 
 DEFAULT_MOVIES_ROOT = Path("/mnt/user/appdata/data/media/movies")
 DEFAULT_QUARANTINE_ROOT = Path("/mnt/user/appdata/reclaimspace/quarantine")

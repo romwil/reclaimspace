@@ -1,0 +1,30 @@
+services:
+  reclaimspace:
+    build: .
+    image: reclaimspace:latest
+    container_name: reclaimspace
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8777}:8777"
+    environment:
+      DATA_DIR: /config
+      PORT: "8777"
+      # Optional: seed settings from env on first run (overrides settings.json when set)
+      PLEX_URL: ${PLEX_URL:-}
+      PLEX_TOKEN: ${PLEX_TOKEN:-}
+      PLEX_MOVIE_SECTION: ${PLEX_MOVIE_SECTION:-}
+      PLEX_TV_SECTION: ${PLEX_TV_SECTION:-}
+      RADARR_URL: ${RADARR_URL:-}
+      RADARR_API_KEY: ${RADARR_API_KEY:-}
+      SONARR_URL: ${SONARR_URL:-}
+      SONARR_API_KEY: ${SONARR_API_KEY:-}
+      MOVIES_ROOT: ${MOVIES_ROOT:-/media/movies}
+      TV_ROOT: ${TV_ROOT:-/media/tv}
+      QUARANTINE_ROOT: ${QUARANTINE_ROOT:-/quarantine}
+      PATH_MAPPINGS: ${PATH_MAPPINGS:-}
+      TV_PATH_MAPPINGS: ${TV_PATH_MAPPINGS:-}
+    volumes:
+      - ${CONFIG_PATH:-./config}:/config
+      - ${MOVIES_PATH:-/mnt/user/data/media/movies}:/media/movies
+      - ${TV_PATH:-/mnt/user/data/media/tv}:/media/tv
+      - ${QUARANTINE_PATH:-/mnt/user/data/quarantine}:/quarantine
