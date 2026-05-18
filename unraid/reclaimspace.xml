@@ -18,7 +18,7 @@ Find Plex movies and TV episodes with duplicate files on disk. Reclaimspace keep
 **Docs:** https://github.com/romwil/reclaimspace
   </Overview>
   <Category>Tools:Utilities MediaServer:Other</Category>
-  <Icon>https://raw.githubusercontent.com/romwil/reclaimspace/main/icon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/romwil/reclaimspace/main/reclaimspace_icon.jpg</Icon>
   <WebUI>http://[IP]:[PORT:8777]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/romwil/reclaimspace/main/templates/reclaimspace.xml</TemplateURL>
   <Config Name="Web UI port" Target="8777" Default="8777" Mode="tcp" Description="Reclaimspace web interface" Type="Port" Display="always" Required="true" Mask="false">8777</Config>
