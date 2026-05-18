@@ -1,1 +1,3 @@
-"""Utilities for reclaiming media-library disk space safely."""
+"""Reclaim disk space from Plex duplicates not managed by Radarr or Sonarr."""
+
+__version__ = "1.0.0"

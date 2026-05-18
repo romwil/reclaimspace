@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+__version__ = "1.0.0"
+
 import argparse
 import json
 import os
@@ -21,6 +23,10 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 DEFAULT_MOVIES_ROOT = Path("/mnt/user/appdata/data/media/movies")
 DEFAULT_QUARANTINE_ROOT = Path("/mnt/user/appdata/reclaimspace/quarantine")
+
+# Container path prefixes used when PATH_MAPPINGS / TV_PATH_MAPPINGS are incomplete.
+MOVIE_PATH_PREFIXES = ("/data/media/movies", "/movies")
+TV_PATH_PREFIXES = ("/data/media/tv", "/tv")
 
 
 @dataclass(frozen=True)
@@ -78,23 +84,21 @@ class QuarantinePlan:
 
 def normalize_media_path(
     file_path: str | Path,
-    movies_root: Path,
+    media_root: Path,
     extra_mappings: Optional[Sequence[Tuple[str, str | Path]]] = None,
+    *,
+    fallback_prefixes: Sequence[str] = MOVIE_PATH_PREFIXES,
 ) -> Path:
-    """Map Plex/Radarr container paths into the host-side Movies root."""
+    """Map Plex or *arr container paths to a host path under the library root."""
     raw_path = str(file_path).strip()
-    root = Path(movies_root)
+    root = Path(media_root)
     mappings: List[Tuple[str, Path]] = []
 
     for container_prefix, host_prefix in extra_mappings or []:
         mappings.append((container_prefix.rstrip("/"), Path(host_prefix)))
 
-    mappings.extend(
-        [
-            ("/data/media/movies", root),
-            ("/movies", root),
-        ]
-    )
+    for prefix in fallback_prefixes:
+        mappings.append((prefix.rstrip("/"), root))
 
     for container_prefix, host_prefix in sorted(
         mappings, key=lambda item: len(item[0]), reverse=True
@@ -125,14 +129,21 @@ def parse_path_mappings(value: str) -> List[Tuple[str, Path]]:
 
 def build_duplicate_groups(
     plex_parts: Iterable[PlexPart],
-    radarr_files: Iterable[RadarrMovieFile],
-    movies_root: Path,
+    managed_files: Iterable[RadarrMovieFile | SonarrEpisodeFile],
+    media_root: Path,
     path_mappings: Optional[Sequence[Tuple[str, str | Path]]] = None,
+    *,
+    arr_app_name: str = "Radarr",
+    media_root_env: str = "MOVIES_ROOT",
+    fallback_prefixes: Sequence[str] = MOVIE_PATH_PREFIXES,
 ) -> List[DuplicateGroup]:
+    normalize = lambda path: normalize_media_path(
+        path, media_root, path_mappings, fallback_prefixes=fallback_prefixes
+    )
     protected = {
-        normalize_media_path(radarr_file.file_path, movies_root, path_mappings)
-        for radarr_file in radarr_files
-        if radarr_file.file_path
+        normalize(managed_file.file_path)
+        for managed_file in managed_files
+        if managed_file.file_path
     }
 
     parts_by_item: Dict[str, List[PlexPart]] = defaultdict(list)
@@ -141,32 +152,33 @@ def build_duplicate_groups(
 
     groups: List[DuplicateGroup] = []
     for rating_key, item_parts in sorted(parts_by_item.items()):
-        normalized_paths = [
-            normalize_media_path(part.file_path, movies_root, path_mappings)
-            for part in item_parts
-        ]
+        normalized_paths = [normalize(part.file_path) for part in item_parts]
         unique_paths = _unique_paths(normalized_paths)
         if len(unique_paths) <= 1:
             continue
 
         first_part = item_parts[0]
         outside_paths = [
-            path for path in unique_paths if not _is_relative_to(path, movies_root)
+            path for path in unique_paths if not _is_relative_to(path, media_root)
         ]
         protected_paths = [path for path in unique_paths if path in protected]
 
         if outside_paths:
             status = "needs_review"
-            reason = "Plex reported one or more files outside MOVIES_ROOT"
+            reason = f"Plex reported one or more files outside {media_root_env}"
             candidate_paths: List[Path] = []
         elif not protected_paths:
             status = "needs_review"
-            reason = "No Plex duplicate matched Radarr's managed file list"
+            reason = f"No Plex duplicate matched {arr_app_name}'s managed file list"
             candidate_paths = []
         else:
             candidate_paths = [path for path in unique_paths if path not in protected]
             status = "ready" if candidate_paths else "protected"
-            reason = "" if candidate_paths else "All duplicate paths are Radarr-managed"
+            reason = (
+                ""
+                if candidate_paths
+                else f"All duplicate paths are managed by {arr_app_name}"
+            )
 
         groups.append(
             DuplicateGroup(
@@ -188,6 +200,7 @@ def filter_current_sonarr_episode_files(
     episode_files: Iterable[SonarrEpisodeFile],
     current_episode_file_ids: Iterable[int],
 ) -> List[SonarrEpisodeFile]:
+    """Keep only Sonarr episode files still linked to an episode via episodeFileId."""
     current_ids = set(current_episode_file_ids)
     return [
         episode_file
@@ -198,7 +211,7 @@ def filter_current_sonarr_episode_files(
 
 def build_quarantine_plan(
     groups: Iterable[DuplicateGroup],
-    movies_root: Path,
+    media_root: Path,
     quarantine_root: Path,
     run_id: Optional[str] = None,
     media_subdir: str = "movies",
@@ -211,9 +224,9 @@ def build_quarantine_plan(
         if group.status != "ready":
             continue
         for candidate in group.candidate_paths:
-            if not _is_relative_to(candidate, movies_root):
+            if not _is_relative_to(candidate, media_root):
                 continue
-            destination = run_root / media_subdir / candidate.relative_to(movies_root)
+            destination = run_root / media_subdir / candidate.relative_to(media_root)
             moves.append(
                 QuarantineMove(
                     source=candidate,
@@ -251,6 +264,7 @@ def quarantine_files(plan: QuarantinePlan) -> Path:
 def filter_existing_quarantine_moves(
     plan: QuarantinePlan,
 ) -> Tuple[QuarantinePlan, List[Path]]:
+    """Drop moves whose source file Plex listed but is already gone from disk."""
     existing_moves = []
     missing_sources = []
     for move in plan.moves:
@@ -568,15 +582,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ).movie_parts()
     groups = build_duplicate_groups(plex_parts, radarr_files, movies_root, path_mappings)
     payload = report_groups(groups)
+    payload["media_type"] = "movies"
 
     if args.quarantine:
         plan = build_quarantine_plan(groups, movies_root, quarantine_root)
+        plan, missing_sources = filter_existing_quarantine_moves(plan)
         manifest_path = quarantine_files(plan)
         payload["quarantine_manifest"] = str(manifest_path)
         payload["quarantined_count"] = len(plan.moves)
+        payload["missing_source_count"] = len(missing_sources)
+        payload["missing_source_paths"] = [str(path) for path in missing_sources]
     else:
         payload["quarantine_manifest"] = None
         payload["quarantined_count"] = 0
+        payload["missing_source_count"] = 0
+        payload["missing_source_paths"] = []
 
     _write_report(payload, args.report)
     return 0
@@ -643,7 +663,15 @@ def tv_main(argv: Optional[Sequence[str]] = None) -> int:
     sonarr_files = SonarrClient(
         config["sonarr_url"], config["sonarr_api_key"]
     ).episode_files()
-    groups = build_duplicate_groups(plex_parts, sonarr_files, tv_root, path_mappings)
+    groups = build_duplicate_groups(
+        plex_parts,
+        sonarr_files,
+        tv_root,
+        path_mappings,
+        arr_app_name="Sonarr",
+        media_root_env="TV_ROOT",
+        fallback_prefixes=TV_PATH_PREFIXES,
+    )
     payload = report_groups(groups)
     payload["media_type"] = "tv"
     payload["plex_episode_part_count"] = len(plex_parts)

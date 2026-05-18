@@ -10,6 +10,7 @@ from reclaimspace.media_duplicates import (
     PlexPart,
     RadarrMovieFile,
     SonarrEpisodeFile,
+    TV_PATH_PREFIXES,
     build_duplicate_groups,
     build_quarantine_plan,
     build_needs_review_report,
@@ -85,7 +86,7 @@ class CandidateSelectionTests(unittest.TestCase):
                     file_path=str(leftover_file),
                 ),
             ],
-            radarr_files=[
+            managed_files=[
                 RadarrMovieFile(
                     movie_id=10,
                     title="The Conjuring",
@@ -93,7 +94,7 @@ class CandidateSelectionTests(unittest.TestCase):
                     file_path=str(protected_file),
                 )
             ],
-            movies_root=MOVIES_ROOT,
+            media_root=MOVIES_ROOT,
         )
 
         self.assertEqual(len(groups), 1)
@@ -134,8 +135,8 @@ class CandidateSelectionTests(unittest.TestCase):
                     file_path=str(MOVIES_ROOT / "The Conjuring (2013)" / "managed.mkv"),
                 )
             ],
-            radarr_files=[],
-            movies_root=MOVIES_ROOT,
+            managed_files=[],
+            media_root=MOVIES_ROOT,
         )
 
         self.assertEqual(groups, [])
@@ -156,8 +157,8 @@ class CandidateSelectionTests(unittest.TestCase):
                     file_path="/tmp/outside-two.mkv",
                 ),
             ],
-            radarr_files=[],
-            movies_root=MOVIES_ROOT,
+            managed_files=[],
+            media_root=MOVIES_ROOT,
         )
 
         self.assertEqual(len(groups), 1)
@@ -187,7 +188,7 @@ class CandidateSelectionTests(unittest.TestCase):
                     file_path="/data/media/tv/Example Show (2024)/Season 1/leftover.mkv",
                 ),
             ],
-            radarr_files=[
+            managed_files=[
                 SonarrEpisodeFile(
                     series_id=1,
                     series_title="Example Show",
@@ -196,8 +197,10 @@ class CandidateSelectionTests(unittest.TestCase):
                     file_path="/tv/Example Show (2024)/Season 1/managed.mkv",
                 )
             ],
-            movies_root=tv_root,
+            media_root=tv_root,
             path_mappings=mappings,
+            arr_app_name="Sonarr",
+            fallback_prefixes=TV_PATH_PREFIXES,
         )
 
         self.assertEqual(len(groups), 1)
@@ -226,7 +229,7 @@ class QuarantineTests(unittest.TestCase):
                 reason="",
             )
 
-            plan = build_quarantine_plan([group], root, quarantine_root, "run-1")
+            plan = build_quarantine_plan([group], root, quarantine_root, run_id="run-1")
             manifest_path = quarantine_files(plan)
 
             expected_destination = (
@@ -260,7 +263,7 @@ class QuarantineTests(unittest.TestCase):
             )
 
             plan = build_quarantine_plan(
-                [group], root, quarantine_root, "run-1", media_subdir="tv"
+                [group], root, quarantine_root, run_id="run-1", media_subdir="tv"
             )
             manifest_path = quarantine_files(plan)
 
@@ -298,7 +301,7 @@ class QuarantineTests(unittest.TestCase):
                 reason="",
             )
             plan = build_quarantine_plan(
-                [group], root, quarantine_root, "run-1", media_subdir="tv"
+                [group], root, quarantine_root, run_id="run-1", media_subdir="tv"
             )
 
             filtered_plan, missing_sources = filter_existing_quarantine_moves(plan)

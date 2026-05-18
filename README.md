@@ -1,107 +1,121 @@
 # Reclaimspace
 
-Reclaimspace is a cleanup utility for Plex plus Arr-managed libraries. It asks Plex which media items have multiple files, asks Radarr or Sonarr which file is actively managed, and quarantines only duplicate files the relevant Arr app does not know about.
+Reclaim disk space from duplicate media files in Plex libraries while keeping the single file Radarr or Sonarr manages.
 
-The first implementation never deletes files directly.
+Plex sometimes indexes more than one file per movie or episode (leftovers after upgrades, renames, or manual copies). Reclaimspace asks Plex which items have duplicates, asks your *arr app which file is authoritative, and **quarantines** everything else. Nothing is deleted—files are moved to a timestamped quarantine folder with a manifest for rollback.
+
+## Features
+
+- **Movies** — Plex + Radarr, default command
+- **TV** — Plex (paged episode scan) + Sonarr (current `episodeFileId` only)
+- **Dry run by default** — JSON reports before any file moves
+- **Path mapping** — reconcile Plex container paths with Radarr/Sonarr paths on the host
+- **Needs-review extraction** — separate report for ambiguous cases
 
 ## Requirements
 
-- Python 3.10 or newer
-- Network access to Plex and Radarr
-- Plex token and Radarr API key
+- Python 3.10+
+- Network access to Plex and Radarr (movies) and/or Sonarr (TV)
+- API tokens for each service you use
+- Read access to your media roots; write access to `QUARANTINE_ROOT` when quarantining
 
-## Configuration
+No third-party Python dependencies (stdlib only).
 
-Copy `.env.example` to a local `.env` file or export the variables in your shell:
+## Quick start
+
+1. **Clone and configure**
+
+   ```bash
+   git clone https://github.com/romwil/reclaimspace.git
+   cd reclaimspace
+   cp .env.example .env
+   # Edit .env with your URLs, API keys, host paths, and path mappings
+   ```
+
+2. **Find your Plex library section keys** (use numeric `key`, not the library title):
+
+   ```bash
+   # Example: Movies = 1, TV Shows = 2
+   export PLEX_MOVIE_SECTION=1
+   export PLEX_TV_SECTION=2
+   ```
+
+3. **Movies — dry run**
+
+   ```bash
+   python3 -m reclaimspace.media_duplicates --report reports/movies-dry-run.json
+   ```
+
+4. **Review** `ready_count`, `candidate_count`, and sample groups in the report.
+
+5. **Movies — quarantine** (after you are satisfied)
+
+   ```bash
+   python3 -m reclaimspace.media_duplicates --quarantine --report reports/movies-quarantine.json
+   ```
+
+6. **TV — same pattern**
+
+   ```bash
+   python3 -m reclaimspace.media_duplicates tv --report reports/tv-dry-run.json
+   python3 -m reclaimspace.media_duplicates tv --quarantine --report reports/tv-quarantine.json
+   ```
+
+See [docs/USAGE.md](docs/USAGE.md) for detailed workflows and [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for every environment variable.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `python3 -m reclaimspace.media_duplicates` | Movies: dry run (default) |
+| `python3 -m reclaimspace.media_duplicates --quarantine` | Movies: move candidates to quarantine |
+| `python3 -m reclaimspace.media_duplicates tv` | TV: dry run |
+| `python3 -m reclaimspace.media_duplicates tv --quarantine` | TV: quarantine |
+| `python3 -m reclaimspace.media_duplicates review-report SOURCE --output OUT` | Extract `needs_review` groups |
+
+Installed entry point (optional): `media-duplicates` (same as the module above).
+
+## Path mappings (important)
+
+Plex and the *arr stack often use different path prefixes for the same files. Set explicit mappings in `.env`:
 
 ```bash
-export PLEX_URL="http://10.10.1.202:32400"
-export PLEX_TOKEN="your-plex-token"
-export RADARR_URL="http://10.10.1.202:7878"
-export RADARR_API_KEY="your-radarr-api-key"
-export SONARR_URL="http://10.10.1.202:8989"
-export SONARR_API_KEY="your-sonarr-api-key"
-export MOVIES_ROOT="/mnt/user/appdata/data/media/movies"
-export TV_ROOT="/mnt/user/appdata/data/media/tv"
-export PATH_MAPPINGS="/data/media/movies=/mnt/user/appdata/data/media/movies;/movies=/mnt/user/appdata/data/media/movies"
-export TV_PATH_MAPPINGS="/data/media/tv=/mnt/user/appdata/data/media/tv;/tv=/mnt/user/appdata/data/media/tv"
-export QUARANTINE_ROOT="/mnt/user/appdata/reclaimspace/quarantine"
+PATH_MAPPINGS=/data/media/movies=/mnt/user/data/media/movies;/movies=/mnt/user/data/media/movies
+TV_PATH_MAPPINGS=/data/media/tv=/mnt/user/data/media/tv;/tv=/mnt/user/data/media/tv
 ```
 
-If Plex has more than one movie library, set `PLEX_MOVIE_SECTION` to the library section key. If it is blank, the tool uses the first Plex library with type `movie`.
+Adjust host paths to match your server. Both prefixes for a library must resolve to the same path under `MOVIES_ROOT` or `TV_ROOT`.
 
-`PATH_MAPPINGS` is the explicit container-to-host translation used before comparing Plex and Radarr paths. Plex commonly reports files as `/data/media/movies/...`, while Radarr reports the same library as `/movies/...`; both prefixes must map to the same host path.
+## Safety
 
-For TV, set `PLEX_TV_SECTION` to the Plex TV Shows library key and use `TV_PATH_MAPPINGS` to map Plex `/data/media/tv/...` and Sonarr `/tv/...` paths to the same host root.
+- Never deletes files—only moves to `QUARANTINE_ROOT/<run-id>/`
+- Does not quarantine files Radarr/Sonarr mark as managed
+- Skips single-file Plex items (not duplicates)
+- TV: ignores stale Sonarr `episodefile` rows not linked to an episode
+- Items outside the configured media root or with no managed match → `needs_review` (no automatic move)
 
-## Dry Run
-
-Dry-run mode is the default and writes a JSON report without moving files:
-
-```bash
-python3 -m reclaimspace.media_duplicates --report movie-duplicates-report.json
-```
-
-Run a TV dry run against Sonarr-managed episode files:
-
-```bash
-python3 -m reclaimspace.media_duplicates tv --report tv-duplicates-report.json
-```
-
-The report includes:
-
-- `plex_paths`: all files Plex reports for a duplicate media item
-- `protected_paths`: files Radarr/Sonarr manages and the tool will not touch
-- `candidate_paths`: duplicate files eligible for quarantine
-- `status`: `ready`, `protected`, or `needs_review`
-
-## Quarantine
-
-After reviewing the dry-run report, run with `--quarantine`:
-
-```bash
-python3 -m reclaimspace.media_duplicates --quarantine --report quarantine-report.json
-```
-
-For TV:
-
-```bash
-python3 -m reclaimspace.media_duplicates tv --quarantine --report tv-quarantine-report.json
-```
-
-Files move to:
+## Project layout
 
 ```text
-$QUARANTINE_ROOT/<run-id>/movies/<relative movie path>
+reclaimspace/
+  media_duplicates.py   # CLI and core logic
+tests/
+docs/
+  CONFIGURATION.md
+  USAGE.md
+.env.example
 ```
-
-Each run writes:
-
-```text
-$QUARANTINE_ROOT/<run-id>/manifest.json
-```
-
-The manifest records every source and destination path so files can be moved back manually if needed.
-
-If Plex reports a duplicate path that no longer exists on disk, the TV quarantine run skips that path and records it in `missing_source_paths` in the report.
-
-## Needs Review Report
-
-After a dry-run or quarantine run, generate a smaller report containing only the groups that were skipped for manual review:
-
-```bash
-python3 -m reclaimspace.media_duplicates review-report \
-  reports/movie-duplicates-quarantine.json \
-  --output reports/movie-duplicates-needs-review.json
-```
-
-The review report keeps each skipped group's Plex paths and reason, and adds file counts to make the manual intervention list easier to scan.
 
 ## Tests
-
-Run the unit tests with Python 3:
 
 ```bash
 python3 -m unittest discover -s tests
 ```
 
+## License
+
+[MIT](LICENSE)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
