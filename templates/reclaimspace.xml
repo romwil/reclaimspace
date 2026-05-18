@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>reclaimspace</Name>
-  <Repository>romwil/reclaimspace</Repository>
+  <Repository>romwil/reclaimspace:latest</Repository>
   <Registry>https://hub.docker.com/r/romwil/reclaimspace</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -13,9 +13,22 @@
 Find Plex movies and TV episodes with duplicate files on disk. Reclaimspace keeps the file Radarr or Sonarr manages and **quarantines** the rest (never deleted).
 
 **Web UI** on port 8777: setup wizard, dry-run scans, sortable/filterable reports, quarantine with manifests, restore preview.
-
-**Docs:** [GitHub README](https://github.com/romwil/reclaimspace) · [Docker guide](https://github.com/romwil/reclaimspace/blob/main/docs/DOCKER.md)
   </Overview>
+  <Description>
+Reclaimspace finds duplicate Plex movies and TV episodes, keeps the file Radarr or Sonarr manages, and **quarantines** the rest. Nothing is deleted—files move to a timestamped folder with a rollback manifest.
+
+**First run**
+1. Open the Web UI at port **8777** (link on the Docker tab).
+2. Complete the **setup wizard**, or open **Configuration** at `/config` if you already have settings.
+3. Confirm container paths: Movies `/media/movies`, TV `/media/tv`, Quarantine `/quarantine` (must match your volume mappings).
+4. Run a **movies dry run**, review the sortable report grid, then **quarantine** when ready.
+
+**Requirements:** Plex plus Radarr (movies) and/or Sonarr (TV) on your network. The UI has no built-in login—use on a trusted LAN or behind an authenticated reverse proxy.
+
+**Support:** [GitHub Issues](https://github.com/romwil/reclaimspace/issues)
+
+**Documentation:** [README](https://github.com/romwil/reclaimspace) · [Docker / Unraid guide](https://github.com/romwil/reclaimspace/blob/main/docs/DOCKER.md) · [Web UI](https://github.com/romwil/reclaimspace/blob/main/docs/WEB_UI.md)
+  </Description>
   <Category>Tools:Utilities MediaServer:Other</Category>
   <Icon>https://raw.githubusercontent.com/romwil/reclaimspace/main/reclaimspace_icon.jpg</Icon>
   <WebUI>http://[IP]:[PORT:8777]/</WebUI>

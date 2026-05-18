@@ -5,9 +5,10 @@ Reclaimspace helps Plex + Radarr/Sonarr users find duplicate media files and **q
 
 This repository publishes the **Reclaimspace** Docker container: web UI on port 8777, setup wizard, sortable scan reports, and quarantine restore.
 
-**Support:** [GitHub Issues](https://github.com/romwil/reclaimspace/issues)
+**Support:** [GitHub Issues](https://github.com/romwil/reclaimspace/issues) (preferred) — post install questions, scan results, and bugs there.
   </Profile>
   <Icon>https://raw.githubusercontent.com/romwil/reclaimspace/main/reclaimspace_icon.jpg</Icon>
   <WebPage>https://github.com/romwil/reclaimspace</WebPage>
   <ReadMe>https://raw.githubusercontent.com/romwil/reclaimspace/main/README.md</ReadMe>
+  <Forum>https://github.com/romwil/reclaimspace/issues</Forum>
 </CommunityApplications>

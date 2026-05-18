@@ -109,7 +109,8 @@ templates/              # Unraid CA container template (canonical)
 unraid/                 # Legacy template path
 docs/
 ca_profile.xml          # Unraid CA repository profile
-icon.svg
+reclaimspace_icon.jpg   # CA / template icon
+icon.svg                # Optional legacy icon
 docker-run.sh
 Dockerfile
 ```

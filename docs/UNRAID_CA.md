@@ -2,114 +2,80 @@
 
 This guide walks through listing **Reclaimspace** in the official Unraid **Community Applications** (CA) store.
 
-## Prerequisites
-
-Complete these before submitting:
+## Prerequisites checklist
 
 | Requirement | Status |
 |-------------|--------|
 | Public GitHub repo `romwil/reclaimspace` | Required |
 | OSI license ([MIT](../LICENSE)) | Required |
-| Docker image on Docker Hub `romwil/reclaimspace` | Required for end users |
-| `ca_profile.xml` in repo root | Included |
-| `templates/reclaimspace.xml` with valid `TemplateURL` | Included |
-| `icon.svg` in repo root | Included |
+| Docker image on Docker Hub `romwil/reclaimspace:latest` and `romwil/reclaimspace:1.2.0` | Required |
+| `ca_profile.xml` in repo root (non-empty `<Profile>`) | Included |
+| `templates/reclaimspace.xml` with valid `TemplateURL`, `<Description>`, `:latest` image | Included |
+| Icon `reclaimspace_icon.jpg` at repo root | Included |
 
-Publish the Docker image first — see [RELEASE.md](RELEASE.md). CA users install by pulling your Hub image; a template alone is not enough.
+Publish images with `./docker-publish.sh` after `docker login` — see [RELEASE.md](RELEASE.md).
 
 ## Repository layout (CA)
 
 ```text
 reclaimspace/
-  ca_profile.xml              # Repository profile for CA
-  icon.svg                    # Icon shown in CA
-  templates/reclaimspace.xml  # Container template (canonical)
-  unraid/reclaimspace.xml     # Legacy path (same template; kept for old links)
+  ca_profile.xml                 # Repository profile for CA
+  reclaimspace_icon.jpg          # Icon shown in CA and templates
+  icon.svg                       # Optional legacy icon (not used by CA)
+  templates/reclaimspace.xml     # Container template (canonical)
+  unraid/reclaimspace.xml        # Legacy path (kept in sync)
 ```
 
-The canonical template URL is:
+Canonical template URL:
 
 `https://raw.githubusercontent.com/romwil/reclaimspace/main/templates/reclaimspace.xml`
 
-## Install without CA (template URL)
-
-Users can add the template before CA approval:
-
-1. Unraid → **Docker** → **Add Container** → **Template Repositories** (or paste template URL if your Unraid version supports it).
-2. Alternatively: **Apps** → **Previous Apps** → install from custom template URL above.
-
-Or use the in-repo script on the server:
-
-```bash
-cd /mnt/user/appdata/reclaimspace
-./docker-run.sh
-```
-
 ## Submit to Community Applications
 
-Modern submissions use the Unraid CA portal (not a manual PR to `community.applications` in most cases).
+1. Open **[https://ca.unraid.net/submit/new](https://ca.unraid.net/submit/new)** and sign in.
+2. **Add repository:** `https://github.com/romwil/reclaimspace`
+3. **Validate** → **Scan** → fix any warnings.
+4. **Submit** for moderator review.
 
-### Step 1 — Sign in
+References: [Builder guide](https://ca.unraid.net/submit/help/builders) · [Repository XML](https://ca.unraid.net/submit/help/repository-xml) · [Repository info XML](https://ca.unraid.net/submit/help/repository-info-xml)
 
-Open **[https://ca.unraid.net/submit](https://ca.unraid.net/submit)** and sign in with your Unraid account.
+## Support links
 
-### Step 2 — Add repository
+- **GitHub Issues** (primary): https://github.com/romwil/reclaimspace/issues — listed in `ca_profile.xml` as `<Forum>` and in template `<Support>`.
+- **Unraid forum thread (optional):** If you create a dedicated thread under [Plugin Support](https://forums.unraid.net/forum/85-plugin-support/), replace the `<Forum>` URL in `ca_profile.xml` with that thread link.
 
-1. Choose **Add repository** (or **New submission**).
-2. Enter: `https://github.com/romwil/reclaimspace`
-3. The scanner looks for:
-   - `ca_profile.xml` (non-empty `<Profile>`)
-   - At least one valid template under `templates/` with a `TemplateURL` pointing to the raw XML on GitHub
+## GitHub Actions — Docker Hub auto-publish
 
-### Step 3 — Validate and scan
+Add repository secrets (Settings → Secrets and variables → Actions):
 
-1. Run **Validate** — fix XML or profile errors.
-2. Run **Scan** — resolve warnings (placeholder icon text, missing support links, etc.).
+| Secret | Value |
+|--------|--------|
+| `DOCKERHUB_USERNAME` | Your Docker Hub username (`romwil`) |
+| `DOCKERHUB_TOKEN` | Docker Hub access token ([create here](https://hub.docker.com/settings/security)) |
 
-Helpful references:
+Then either:
 
-- [Builder guide](https://ca.unraid.net/submit/help/builders)
-- [Repository info XML](https://ca.unraid.net/submit/help/repository-info-xml)
-- [Starter template repo](https://github.com/unraid/unraid-community-apps-starter)
+- Push a version tag: `git tag v1.2.1 && git push origin v1.2.1` (runs [.github/workflows/release.yml](../.github/workflows/release.yml)), or
+- **Actions** → **Release** → **Run workflow** and enter the version (e.g. `1.2.0`).
 
-### Step 4 — Submit for review
+One-time setup from the CLI:
 
-Submit when scan passes. Moderators may request changes (icon, overview text, category, support link).
+```bash
+gh secret set DOCKERHUB_USERNAME --body "romwil"
+gh secret set DOCKERHUB_TOKEN --body "YOUR_DOCKER_HUB_TOKEN"
+```
 
-### Step 5 — After approval
+## After approval
 
-1. Users find **Reclaimspace** under **Apps** → search `reclaimspace`.
-2. Install maps paths from `templates/reclaimspace.xml` defaults; users should confirm **Configuration** in the web UI (`http://[IP]:8777/config`).
-3. Monitor [GitHub Issues](https://github.com/romwil/reclaimspace/issues) for support.
-
-## Optional: support forum thread
-
-Create a thread under [Unraid → Plugin Support](https://forums.unraid.net/forum/85-plugin-support/) and add the URL to `ca_profile.xml` as `<Forum>...</Forum>` for visibility in CA.
-
-## Updating the CA listing
-
-1. Merge changes to `main` (template, overview, version).
-2. Push a new Docker tag to Hub (`romwil/reclaimspace:latest` and version tag).
-3. Re-run **Scan** in the CA portal if you changed templates or profile metadata.
-
-## Container paths checklist
-
-Tell users to verify in **Configuration** (`/config`):
-
-| Setting | Typical container value |
-|---------|-------------------------|
-| Movies root | `/media/movies` |
-| TV root | `/media/tv` |
-| Quarantine root | `/quarantine` |
-
-Host paths are set in the Docker template volume mappings, not in these fields.
+1. Users install from **Apps** → search `reclaimspace`.
+2. Open Web UI → **Configuration** — confirm `/media/movies`, `/media/tv`, `/quarantine`.
+3. Run a dry run before quarantine.
 
 ## Troubleshooting CA scan
 
 | Issue | Fix |
 |-------|-----|
-| Missing `ca_profile.xml` | Add file at repo root; push to `main` |
-| Empty `<Profile>` | Add description in `ca_profile.xml` |
-| Invalid `TemplateURL` | Must be raw GitHub URL to the exact XML file |
-| Image pull fails | Publish `romwil/reclaimspace` on Docker Hub |
-| Template not found | Ensure file is under `templates/`, not only `unraid/` |
+| Image pull fails | Push `romwil/reclaimspace:latest` and `romwil/reclaimspace:1.2.0` |
+| Missing `<Description>` | Use `templates/reclaimspace.xml` on `main` |
+| Invalid `TemplateURL` | Must be raw GitHub URL to `templates/reclaimspace.xml` |
+| Empty `<Profile>` | Edit `ca_profile.xml` |

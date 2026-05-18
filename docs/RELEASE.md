@@ -34,6 +34,15 @@ git push origin v1.2.0
 
 Pushing tag `v*` triggers [.github/workflows/release.yml](../.github/workflows/release.yml) to build and push `romwil/reclaimspace:latest` and `romwil/reclaimspace:<version>`.
 
+Configure secrets once:
+
+```bash
+gh secret set DOCKERHUB_USERNAME --body "romwil"
+gh secret set DOCKERHUB_TOKEN --body "YOUR_DOCKER_HUB_TOKEN"
+```
+
+You can also run the workflow manually: **Actions** → **Release** → **Run workflow**.
+
 **Option B — Manual:**
 
 ```bash
