@@ -6,7 +6,7 @@
     <title>Reclaimspace</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body>
+  <body data-page="dashboard">
     <header class="header">
       <div class="brand">
         <div class="logo" aria-hidden="true">RS</div>
@@ -15,13 +15,25 @@
           <p>Quarantine Plex duplicates · protect Radarr &amp; Sonarr files</p>
         </div>
       </div>
-      <div id="health" class="health-pill" role="status">
-        <span class="health-dot"></span>
-        <span class="health-text">Checking…</span>
+      <nav class="top-nav" aria-label="Main">
+        <a href="/" class="nav-link" data-nav="dashboard">Dashboard</a>
+        <a href="/config" class="nav-link" data-nav="config">Configuration</a>
+      </nav>
+      <div class="header-actions">
+        <button type="button" id="open-setup-wizard" class="btn secondary btn-sm" title="Re-run first-time setup">
+          Setup wizard
+        </button>
+        <a id="setup-health" class="setup-health hidden" href="/config" title="Setup status"></a>
+        <div id="health" class="health-pill" role="status">
+          <span class="health-dot"></span>
+          <span class="health-text">Checking…</span>
+        </div>
       </div>
     </header>
 
-    <main class="layout">
+    <div id="wizard-root" class="wizard-container hidden"></div>
+
+    <main id="dashboard" class="layout hidden">
       <section class="card card-scan" aria-labelledby="scan-heading">
         <div class="card-header">
           <div>
@@ -58,7 +70,7 @@
         <div class="card-header">
           <div>
             <h2 id="jobs-heading">Recent jobs</h2>
-            <p class="card-subtitle">Click a finished job to open its report.</p>
+            <p class="card-subtitle">Live progress while scans run.</p>
           </div>
           <button type="button" id="refresh-jobs" class="btn ghost btn-sm" title="Refresh jobs">↻</button>
         </div>
@@ -69,9 +81,13 @@
         <div class="card-header">
           <div>
             <h2 id="reports-heading">Reports</h2>
-            <p class="card-subtitle">JSON output from dry runs and quarantine runs.</p>
+            <p class="card-subtitle">Sort and filter duplicate groups, or browse raw JSON.</p>
           </div>
           <div class="actions">
+            <div class="tab-bar" role="tablist">
+              <button type="button" class="tab active" data-report-tab="grid">Data</button>
+              <button type="button" class="tab" data-report-tab="json">JSON</button>
+            </div>
             <a id="download-report" class="btn ghost btn-sm hidden" href="#" download>Download</a>
             <button type="button" id="refresh-reports" class="btn ghost btn-sm" title="Refresh reports">↻</button>
           </div>
@@ -82,27 +98,24 @@
           </div>
           <div class="report-pane">
             <div id="report-summary" class="report-summary hidden"></div>
-            <pre id="report-viewer" class="report-viewer" tabindex="0">Select a report to inspect results.</pre>
+            <p id="report-human-summary" class="report-human-summary hidden"></p>
+            <div id="report-grid" class="report-grid hidden"></div>
+            <div id="report-json" class="report-json hidden"></div>
+            <p id="report-empty" class="report-empty">Select a report to inspect results.</p>
           </div>
         </div>
       </section>
 
-      <section class="card span-2 card-config" aria-labelledby="config-heading">
+      <section class="card span-2" aria-labelledby="restore-heading">
         <div class="card-header">
           <div>
-            <h2 id="config-heading">Configuration</h2>
-            <p class="card-subtitle">Saved to <code>settings.json</code> in your config volume.</p>
+            <h2 id="restore-heading">Restore from quarantine</h2>
+            <p class="card-subtitle">Roll back a quarantine run using its manifest.</p>
           </div>
-          <div class="actions">
-            <button type="button" id="load-plex-sections" class="btn secondary btn-sm">Plex libraries</button>
-            <button type="button" id="save-settings" class="btn primary btn-sm">Save</button>
-          </div>
+          <button type="button" id="refresh-manifests" class="btn ghost btn-sm">↻</button>
         </div>
-
-        <div id="plex-sections" class="plex-sections hidden" role="region" aria-label="Plex libraries"></div>
-
-        <form id="settings-form" class="settings-sections"></form>
-        <p id="settings-status" class="toast-area" role="status" aria-live="polite"></p>
+        <div id="manifest-list" class="manifest-list"></div>
+        <p id="restore-status" class="toast-area"></p>
       </section>
     </main>
 
@@ -110,6 +123,9 @@
       <p>Files outside your library root or without a managed match are marked <em>needs review</em> and are not moved automatically.</p>
     </footer>
 
+    <script src="/static/wizard.js"></script>
+    <script src="/static/common.js"></script>
+    <script src="/static/reports-grid.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

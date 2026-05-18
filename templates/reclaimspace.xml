@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<!-- Legacy path: canonical template is templates/reclaimspace.xml -->
 <Container version="2">
   <Name>reclaimspace</Name>
   <Repository>romwil/reclaimspace</Repository>
@@ -15,7 +14,7 @@ Find Plex movies and TV episodes with duplicate files on disk. Reclaimspace keep
 
 **Web UI** on port 8777: setup wizard, dry-run scans, sortable/filterable reports, quarantine with manifests, restore preview.
 
-**Docs:** https://github.com/romwil/reclaimspace
+**Docs:** [GitHub README](https://github.com/romwil/reclaimspace) · [Docker guide](https://github.com/romwil/reclaimspace/blob/main/docs/DOCKER.md)
   </Overview>
   <Category>Tools:Utilities MediaServer:Other</Category>
   <Icon>https://raw.githubusercontent.com/romwil/reclaimspace/main/icon.svg</Icon>
@@ -23,10 +22,10 @@ Find Plex movies and TV episodes with duplicate files on disk. Reclaimspace keep
   <TemplateURL>https://raw.githubusercontent.com/romwil/reclaimspace/main/templates/reclaimspace.xml</TemplateURL>
   <Config Name="Web UI port" Target="8777" Default="8777" Mode="tcp" Description="Reclaimspace web interface" Type="Port" Display="always" Required="true" Mask="false">8777</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/reclaimspace/config" Mode="rw" Description="settings.json and scan reports" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/reclaimspace/config</Config>
-  <Config Name="Movies library" Target="/media/movies" Default="/mnt/user/data/media/movies" Mode="rw" Description="Host movie library" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/movies</Config>
-  <Config Name="TV library" Target="/media/tv" Default="/mnt/user/data/media/tv" Mode="rw" Description="Host TV library" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/tv</Config>
-  <Config Name="Quarantine" Target="/quarantine" Default="/mnt/user/data/quarantine" Mode="rw" Description="Quarantine destination" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/quarantine</Config>
-  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Movies library" Target="/media/movies" Default="/mnt/user/data/media/movies" Mode="rw" Description="Host movie library (set Movies root to /media/movies in Configuration)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/movies</Config>
+  <Config Name="TV library" Target="/media/tv" Default="/mnt/user/data/media/tv" Mode="rw" Description="Host TV library (set TV root to /media/tv in Configuration)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/tv</Config>
+  <Config Name="Quarantine" Target="/quarantine" Default="/mnt/user/data/quarantine" Mode="rw" Description="Where duplicate files are moved" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/quarantine</Config>
+  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex URL (also editable in web UI)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex token" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Optional seed: Radarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Optional seed: Radarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>

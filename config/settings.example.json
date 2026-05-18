@@ -12,5 +12,11 @@
   "quarantine_root": "/quarantine",
   "path_mappings": "/data/media/movies=/media/movies;/movies=/media/movies",
   "tv_path_mappings": "/data/media/tv=/media/tv;/tv=/media/tv",
-  "tv_page_size": 500
+  "tv_page_size": 500,
+  "onboarding_complete": false,
+  "setup_wizard_pending": false,
+  "notification_webhook_url": "",
+  "schedule_dry_run_enabled": false,
+  "schedule_dry_run_interval_hours": 168,
+  "schedule_dry_run_media_type": "movies"
 }

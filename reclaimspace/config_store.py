@@ -49,6 +49,12 @@ class Settings:
     plex_movie_section: str = ""
     plex_tv_section: str = ""
     tv_page_size: int = 500
+    onboarding_complete: bool = False
+    setup_wizard_pending: bool = False
+    notification_webhook_url: str = ""
+    schedule_dry_run_enabled: bool = False
+    schedule_dry_run_interval_hours: int = 168
+    schedule_dry_run_media_type: str = "movies"
 
     def to_env(self) -> Dict[str, str]:
         payload = {
@@ -101,15 +107,16 @@ class Settings:
 
 
 def load_merged_settings(data_dir: Path) -> Settings:
-    """Load settings file, then apply non-empty environment overrides."""
+    """Load settings file, then apply environment overrides for set env vars only."""
     settings_path = data_dir / "settings.json"
     settings = Settings.load(settings_path)
-    env_settings = Settings.from_env()
     merged = asdict(settings)
-    for key, value in asdict(env_settings).items():
-        if value in ("", None):
+    for env_name, field_name in ENV_TO_FIELD.items():
+        if env_name not in os.environ:
             continue
-        merged[key] = value
+        merged[field_name] = os.environ[env_name]
+    if "TV_PAGE_SIZE" in os.environ:
+        merged["tv_page_size"] = int(os.environ["TV_PAGE_SIZE"])
     return Settings.from_mapping(merged)
 
 

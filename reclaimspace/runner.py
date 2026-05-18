@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal, Mapping, Optional
+from typing import Callable, Literal, Mapping, Optional
 
 from reclaimspace.config_store import Settings
 from reclaimspace.media_duplicates import (
@@ -23,6 +23,7 @@ from reclaimspace.media_duplicates import (
 
 MediaType = Literal["movies", "tv"]
 ScanMode = Literal["dry_run", "quarantine"]
+ProgressCallback = Callable[[str, int, int, str], None]
 
 
 def run_scan(
@@ -32,33 +33,49 @@ def run_scan(
     report_path: Path,
     *,
     tv_page_size: Optional[int] = None,
+    progress: Optional[ProgressCallback] = None,
 ) -> Mapping[str, object]:
     settings.apply_to_environ()
+
+    def emit(phase: str, current: int, total: int, message: str = "") -> None:
+        if progress is not None:
+            progress(phase, current, total, message)
+
     if media_type == "movies":
-        return _run_movies(settings, mode, report_path)
-    return _run_tv(settings, mode, report_path, tv_page_size or settings.tv_page_size)
+        return _run_movies(settings, mode, report_path, emit)
+    return _run_tv(settings, mode, report_path, tv_page_size or settings.tv_page_size, emit)
 
 
-def _run_movies(settings: Settings, mode: ScanMode, report_path: Path) -> Mapping[str, object]:
+def _run_movies(
+    settings: Settings,
+    mode: ScanMode,
+    report_path: Path,
+    emit: ProgressCallback,
+) -> Mapping[str, object]:
     if not settings.radarr_url or not settings.radarr_api_key:
         raise RuntimeError("Radarr URL and API key are required for movie scans.")
     movies_root = Path(settings.movies_root)
     if not movies_root.exists():
         raise RuntimeError(f"MOVIES_ROOT does not exist: {movies_root}")
 
+    emit("connecting", 0, 4, "Connecting to Plex and Radarr")
     path_mappings = parse_path_mappings(settings.path_mappings)
+    emit("scanning_arr", 1, 4, "Loading Radarr movie files")
     radarr_files = RadarrClient(settings.radarr_url, settings.radarr_api_key).movie_files()
+    emit("scanning_plex", 2, 4, "Scanning Plex movie library")
     plex_parts = PlexClient(
         settings.plex_url,
         settings.plex_token,
         movie_section=settings.plex_movie_section or None,
     ).movie_parts()
+    emit("comparing", 3, 4, "Comparing Plex and Radarr paths")
     groups = build_duplicate_groups(plex_parts, radarr_files, movies_root, path_mappings)
     payload = dict(report_groups(groups))
     payload["media_type"] = "movies"
     payload["scan_mode"] = mode
 
     if mode == "quarantine":
+        emit("quarantining", 4, 4, "Moving files to quarantine")
         quarantine_root = Path(settings.quarantine_root)
         plan = build_quarantine_plan(groups, movies_root, quarantine_root)
         plan, missing_sources = filter_existing_quarantine_moves(plan)
@@ -73,6 +90,7 @@ def _run_movies(settings: Settings, mode: ScanMode, report_path: Path) -> Mappin
         payload["missing_source_count"] = 0
         payload["missing_source_paths"] = []
 
+    emit("writing_report", 4, 4, "Writing report")
     _write_json_report(payload, report_path)
     return payload
 
@@ -82,6 +100,7 @@ def _run_tv(
     mode: ScanMode,
     report_path: Path,
     page_size: int,
+    emit: ProgressCallback,
 ) -> Mapping[str, object]:
     if not settings.tv_root:
         raise RuntimeError("TV_ROOT is required for TV scans.")
@@ -94,11 +113,21 @@ def _run_tv(
     if not tv_root.exists():
         raise RuntimeError(f"TV_ROOT does not exist: {tv_root}")
 
+    emit("connecting", 0, 5, "Connecting to Plex and Sonarr")
     path_mappings = parse_path_mappings(settings.tv_path_mappings)
+
+    def plex_progress(current: int, total: int, phase: str) -> None:
+        emit(phase, current, total, f"Plex TV page {current} of {total}")
+
+    emit("scanning_plex", 0, 1, "Scanning Plex TV episodes")
     plex_parts = PlexClient(settings.plex_url, settings.plex_token).tv_episode_parts(
-        settings.plex_tv_section, page_size=page_size
+        settings.plex_tv_section,
+        page_size=page_size,
+        progress_callback=plex_progress,
     )
+    emit("scanning_arr", 1, 5, "Loading Sonarr episode files")
     sonarr_files = SonarrClient(settings.sonarr_url, settings.sonarr_api_key).episode_files()
+    emit("comparing", 2, 5, "Comparing Plex and Sonarr paths")
     groups = build_duplicate_groups(
         plex_parts,
         sonarr_files,
@@ -115,6 +144,7 @@ def _run_tv(
     payload["sonarr_episode_file_count"] = len(sonarr_files)
 
     if mode == "quarantine":
+        emit("quarantining", 4, 5, "Moving files to quarantine")
         quarantine_root = Path(settings.quarantine_root)
         plan = build_quarantine_plan(groups, tv_root, quarantine_root, media_subdir="tv")
         plan, missing_sources = filter_existing_quarantine_moves(plan)
@@ -129,6 +159,7 @@ def _run_tv(
         payload["missing_source_count"] = 0
         payload["missing_source_paths"] = []
 
+    emit("writing_report", 5, 5, "Writing report")
     _write_json_report(payload, report_path)
     return payload
 

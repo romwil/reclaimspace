@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from reclaimspace._version import __version__
 
@@ -403,9 +403,15 @@ class PlexClient:
                     )
         return parts
 
-    def tv_episode_parts(self, section_key: str, page_size: int = 500) -> List[PlexPart]:
+    def tv_episode_parts(
+        self,
+        section_key: str,
+        page_size: int = 500,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    ) -> List[PlexPart]:
         parts: List[PlexPart] = []
         start = 0
+        total_size: Optional[int] = None
 
         while True:
             root = self._request_xml(
@@ -413,6 +419,9 @@ class PlexClient:
                 f"?type=4&X-Plex-Container-Start={start}"
                 f"&X-Plex-Container-Size={page_size}"
             )
+            container = root.find(".//MediaContainer") or root
+            if total_size is None:
+                total_size = _optional_int(container.attrib.get("totalSize"))
             videos = root.findall(".//Video")
             if not videos:
                 break
@@ -433,6 +442,10 @@ class PlexClient:
                         )
 
             start += len(videos)
+            if progress_callback is not None:
+                current = start
+                total = total_size if total_size is not None else current
+                progress_callback(current, max(total, 1), "scanning_plex")
             if len(videos) < page_size:
                 break
 
