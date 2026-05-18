@@ -1,0 +1,12 @@
+[project]
+name = "reclaimspace"
+version = "0.1.0"
+description = "Safely quarantine Plex media duplicates not managed by Arr apps."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+media-duplicates = "reclaimspace.media_duplicates:main"
+
+[tool.unittest]
+testpaths = ["tests"]
