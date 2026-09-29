@@ -145,6 +145,7 @@ class JobManager:
                 job.summary = {
                     "ready_count": payload.get("ready_count", 0),
                     "candidate_count": payload.get("candidate_count", 0),
+                    "protected_count": payload.get("protected_count", 0),
                     "needs_review_count": payload.get("needs_review_count", 0),
                     "quarantined_count": payload.get("quarantined_count", 0),
                     "missing_source_count": payload.get("missing_source_count", 0),

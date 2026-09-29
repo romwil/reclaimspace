@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from reclaimspace import __version__
 from reclaimspace.config_store import Settings, load_merged_settings, save_settings
 from reclaimspace.restore import list_quarantine_manifests, restore_from_manifest
+from reclaimspace.media_duplicates import PlexClient
 from reclaimspace.runner import list_plex_sections
 from reclaimspace.web.jobs import get_job_manager
 from reclaimspace.web.reports_view import report_groups_table, report_summary
@@ -97,6 +98,10 @@ class PathMappingsPayload(BaseModel):
 class RestoreRequest(BaseModel):
     manifest_path: str
     dry_run: bool = True
+
+
+class SplitRequest(BaseModel):
+    rating_key: str
 
 
 def _mask_settings(settings: Settings) -> Dict[str, Any]:
@@ -214,6 +219,38 @@ def put_settings(payload: SettingsPayload) -> Dict[str, Any]:
         settings.setup_wizard_pending = False
     save_settings(DATA_DIR, settings)
     return _mask_settings(settings)
+
+
+@app.post("/api/plex/split")
+def plex_split(request: SplitRequest) -> Dict[str, object]:
+    """Split one Plex item. Does not quarantine files or change Radarr/Sonarr."""
+    settings = load_merged_settings(DATA_DIR)
+    if not settings.plex_url or not settings.plex_token:
+        raise HTTPException(status_code=400, detail="Plex URL and token are required.")
+    rating_key = request.rating_key.strip()
+    if not rating_key.isdigit():
+        raise HTTPException(status_code=400, detail="A numeric Plex rating key is required.")
+    try:
+        PlexClient(settings.plex_url, settings.plex_token).split_item(rating_key)
+    except Exception as error:  # noqa: BLE001 - return a short message, never the token
+        raise HTTPException(
+            status_code=502, detail=_safe_plex_detail(error, settings.plex_token)
+        ) from error
+    return {
+        "ok": True,
+        "rating_key": rating_key,
+        "message": "Split in Plex. Run a new dry run to refresh this report.",
+    }
+
+
+def _safe_plex_detail(error: Exception, token: str) -> str:
+    text = str(error).strip() or "Plex could not split this item."
+    if token:
+        text = text.replace(token, "[redacted]")
+    line = text.splitlines()[0]
+    if len(line) > 180:
+        line = line[:180].rstrip()
+    return line
 
 
 @app.get("/api/plex/sections")

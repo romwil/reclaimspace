@@ -135,6 +135,7 @@ def build_duplicate_groups(
     arr_app_name: str = "Radarr",
     media_root_env: str = "MOVIES_ROOT",
     fallback_prefixes: Sequence[str] = MOVIE_PATH_PREFIXES,
+    arr_file_noun: str = "movie file",
 ) -> List[DuplicateGroup]:
     normalize = lambda path: normalize_media_path(
         path, media_root, path_mappings, fallback_prefixes=fallback_prefixes
@@ -160,6 +161,9 @@ def build_duplicate_groups(
         outside_paths = [
             path for path in unique_paths if not _is_relative_to(path, media_root)
         ]
+        # Exact membership in the library-wide set of current managed files.
+        # A Plex item can match two different movies or episodes; that is not
+        # "this title was imported twice."
         protected_paths = [path for path in unique_paths if path in protected]
 
         if outside_paths:
@@ -176,7 +180,10 @@ def build_duplicate_groups(
             reason = (
                 ""
                 if candidate_paths
-                else f"All duplicate paths are managed by {arr_app_name}"
+                else (
+                    f"Plex lists multiple files and each path is a current {arr_app_name} "
+                    f"{arr_file_noun}, so nothing is safe to quarantine."
+                )
             )
 
         groups.append(
@@ -451,6 +458,36 @@ class PlexClient:
 
         return parts
 
+    def split_item(self, rating_key: str) -> None:
+        """Split one Plex metadata item, the same as Split in the Plex client.
+
+        Plex contract: PUT /library/metadata/{ratingKey}/split
+        with X-Plex-Token in the header, not the query string.
+        This does not move files and does not talk to Radarr or Sonarr.
+        """
+        key = str(rating_key).strip()
+        if not key.isdigit():
+            raise ValueError("Plex rating key must be numeric.")
+        url = f"{self.base_url}/library/metadata/{key}/split"
+        request = urllib.request.Request(
+            url,
+            data=b"",
+            method="PUT",
+            headers={
+                "Accept": "application/xml",
+                "X-Plex-Token": self.token,
+                "X-Plex-Product": "Reclaimspace",
+                "X-Plex-Client-Identifier": "reclaimspace",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                response.read()
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(f"Plex refused the split (HTTP {error.code}).") from error
+        except urllib.error.URLError as error:
+            raise RuntimeError("Could not reach Plex.") from error
+
     def _find_movie_section_key(self) -> str:
         root = self._request_xml("/library/sections")
         for directory in root.findall(".//Directory"):
@@ -488,6 +525,9 @@ def report_groups(groups: Iterable[DuplicateGroup]) -> Dict[str, object]:
         "groups": group_payloads,
         "ready_count": sum(1 for group in group_payloads if group["status"] == "ready"),
         "candidate_count": sum(len(group["candidate_paths"]) for group in group_payloads),
+        "protected_count": sum(
+            1 for group in group_payloads if group["status"] == "protected"
+        ),
         "needs_review_count": sum(
             1 for group in group_payloads if group["status"] == "needs_review"
         ),
@@ -683,6 +723,7 @@ def tv_main(argv: Optional[Sequence[str]] = None) -> int:
         arr_app_name="Sonarr",
         media_root_env="TV_ROOT",
         fallback_prefixes=TV_PATH_PREFIXES,
+        arr_file_noun="episode file",
     )
     payload = report_groups(groups)
     payload["media_type"] = "tv"

@@ -136,6 +136,7 @@ def _run_tv(
         arr_app_name="Sonarr",
         media_root_env="TV_ROOT",
         fallback_prefixes=TV_PATH_PREFIXES,
+        arr_file_noun="episode file",
     )
     payload = dict(report_groups(groups))
     payload["media_type"] = "tv"

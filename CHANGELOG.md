@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.3.0] - 2026-09-29
+
+### Added
+
+- **Split in Plex** on a report row that lists two or more paths. The confirm prompt shows every path. The action calls Plex split only: it does not move files and does not change Radarr or Sonarr. Run a new dry run afterward; the open report does not update itself.
+- **Protected** summary chip (`protected_count`) for groups where every Plex path is a current managed file. Older reports that omit the field still show the chip, counted from the groups.
+- Report rows include every Plex path, protected path, and candidate path.
+
+### Changed
+
+- The report grid status filter opens on **Ready** (rows with something to quarantine).
+- The **Candidates** column counts quarantine candidate paths only.
+- Expanding a row lists every path, not a single sample keep or duplicate path.
+- A protected group is described as every Plex path matching some current managed file (this title’s file and another title’s file can both be protected). Quarantine still skips the whole group.
+
 ## [1.2.0] - 2026-05-18
 
 ### Added

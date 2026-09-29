@@ -29,7 +29,8 @@ def notify_scan_complete(
         f"Reclaimspace scan {status}: {media_type} ({mode})\n"
         f"Report: {report_name}\n"
         f"Ready: {summary.get('ready_count', 0)}, "
-        f"Candidates: {summary.get('candidate_count', 0)}"
+        f"Candidates: {summary.get('candidate_count', 0)}, "
+        f"Protected: {summary.get('protected_count', 0)}"
     )
     if failed and error:
         text += f"\nError: {error}"

@@ -7,7 +7,7 @@ const REPORT_GRID_COLUMNS = [
   { key: "reason", label: "Reason", type: "string", get: (r) => r.reason || "" },
   {
     key: "candidate_count",
-    label: "Files",
+    label: "Candidates",
     type: "number",
     get: (r) => Number(r.candidate_count) || 0,
   },
@@ -22,19 +22,81 @@ const REPORT_GRID_COLUMNS = [
     key: "protected_path",
     label: "Keep",
     type: "string",
-    get: (r) => r.protected_path || "",
-    format: (r) => pathBasename(r.protected_path) || "—",
-    title: (r) => r.protected_path || "",
+    get: (r) => rowPaths(r, "protected_paths", "protected_path")[0] || "",
+    format: (r) => pathBasename(rowPaths(r, "protected_paths", "protected_path")[0]) || "—",
+    title: (r) => rowPaths(r, "protected_paths", "protected_path").join("\n"),
   },
   {
     key: "sample_candidate",
     label: "Duplicate",
     type: "string",
-    get: (r) => r.sample_candidate || "",
-    format: (r) => pathBasename(r.sample_candidate) || "—",
-    title: (r) => r.sample_candidate || "",
+    get: (r) => rowPaths(r, "candidate_paths", "sample_candidate")[0] || "",
+    format: (r) => pathBasename(rowPaths(r, "candidate_paths", "sample_candidate")[0]) || "—",
+    title: (r) => rowPaths(r, "candidate_paths", "sample_candidate").join("\n"),
   },
 ];
+
+const STATUS_FILTERS = [
+  { value: "all", label: "All statuses" },
+  { value: "ready", label: "Ready" },
+  { value: "protected", label: "Protected" },
+  { value: "needs_review", label: "Needs review" },
+];
+
+function rowPaths(row, listKey, singleKey) {
+  if (Array.isArray(row[listKey])) {
+    return row[listKey].map((path) => String(path || "")).filter(Boolean);
+  }
+  if (singleKey && row[singleKey]) return [String(row[singleKey])];
+  return [];
+}
+
+function renderPathList(label, paths) {
+  if (!paths.length) {
+    return `<p><strong>${escapeHtml(label)}:</strong> —</p>`;
+  }
+  const items = paths.map((path) => `<li><code>${escapeHtml(path)}</code></li>`).join("");
+  return `<div class="path-list"><p><strong>${escapeHtml(label)}</strong></p><ul>${items}</ul></div>`;
+}
+
+function distinctPaths(paths) {
+  const seen = new Set();
+  const unique = [];
+  for (const path of paths) {
+    if (seen.has(path)) continue;
+    seen.add(path);
+    unique.push(path);
+  }
+  return unique;
+}
+
+function splitConfirmText(title, paths) {
+  const name = title ? `"${title}"` : "this item";
+  const listed = paths.map((path) => `• ${path}`).join("\n");
+  return [
+    `Split ${name} in Plex?`,
+    "",
+    "This separates these files into individual Plex items, the same as Split in the Plex client. It does not move or delete files. It does not change Radarr or Sonarr.",
+    "",
+    listed,
+  ].join("\n");
+}
+
+function renderSplitAction(row, message) {
+  const paths = distinctPaths(rowPaths(row, "plex_paths"));
+  if (!row.rating_key || paths.length < 2) return "";
+  const status = message
+    ? `<p class="split-result ${message.ok ? "ok" : "error"}" role="status">${escapeHtml(message.text)}</p>`
+    : "";
+  if (message?.ok) {
+    return `<div class="split-action">${status}</div>`;
+  }
+  return `<div class="split-action">
+    <button type="button" class="btn ghost btn-sm split-plex-btn" data-row-id="${escapeHtml(row._rowId)}">Split in Plex</button>
+    <p class="split-note">Separates these files into individual Plex items. Does not move or delete files, and does not change Radarr or Sonarr.</p>
+    ${status}
+  </div>`;
+}
 
 class ReportDataGrid {
   constructor(container) {
@@ -42,8 +104,11 @@ class ReportDataGrid {
     this.rows = [];
     this.filtered = [];
     this.sort = { key: "title", dir: "asc" };
-    this.filters = { search: "", status: "all" };
+    this.filters = { search: "", status: "ready" };
+    this.reportName = null;
     this.expandedId = null;
+    this.splitMessages = {};
+    this.splitInFlight = null;
   }
 
   setRows(rows) {
@@ -52,6 +117,8 @@ class ReportDataGrid {
       _rowId: `${row.rating_key || row.title || "row"}-${index}`,
     }));
     this.expandedId = null;
+    this.splitMessages = {};
+    this.splitInFlight = null;
     this.applyFilters();
     this.render();
   }
@@ -69,9 +136,10 @@ class ReportDataGrid {
           r.year,
           r.status,
           r.reason,
-          r.protected_path,
-          r.sample_candidate,
           r.rating_key,
+          rowPaths(r, "plex_paths").join(" "),
+          rowPaths(r, "protected_paths", "protected_path").join(" "),
+          rowPaths(r, "candidate_paths", "sample_candidate").join(" "),
         ]
           .join(" ")
           .toLowerCase();
@@ -104,14 +172,19 @@ class ReportDataGrid {
   }
 
   render() {
-    const statuses = [...new Set(this.rows.map((r) => r.status).filter(Boolean))].sort();
-    const statusOptions = [
-      `<option value="all"${this.filters.status === "all" ? " selected" : ""}>All statuses</option>`,
-      ...statuses.map(
-        (s) =>
-          `<option value="${escapeHtml(s)}"${this.filters.status === s ? " selected" : ""}>${escapeHtml(s)}</option>`
-      ),
-    ].join("");
+    const present = new Set(this.rows.map((r) => r.status).filter(Boolean));
+    const statusChoices = [...STATUS_FILTERS];
+    for (const status of [...present].sort()) {
+      if (!statusChoices.some((choice) => choice.value === status)) {
+        statusChoices.push({ value: status, label: status });
+      }
+    }
+    const statusOptions = statusChoices
+      .map((choice) => {
+        const selected = this.filters.status === choice.value ? " selected" : "";
+        return `<option value="${escapeHtml(choice.value)}"${selected}>${escapeHtml(choice.label)}</option>`;
+      })
+      .join("");
 
     const headerCells = REPORT_GRID_COLUMNS.map((col) => {
       const active = this.sort.key === col.key;
@@ -139,8 +212,10 @@ class ReportDataGrid {
             const detail = expanded
               ? `<tr class="grid-detail-row"><td colspan="${REPORT_GRID_COLUMNS.length}">
                   <div class="grid-detail">
-                    <p><strong>Keep:</strong> <code>${escapeHtml(row.protected_path || "—")}</code></p>
-                    <p><strong>Duplicate:</strong> <code>${escapeHtml(row.sample_candidate || "—")}</code></p>
+                    ${renderPathList("Plex paths", rowPaths(row, "plex_paths"))}
+                    ${renderPathList("Protected paths", rowPaths(row, "protected_paths", "protected_path"))}
+                    ${renderPathList("Candidates", rowPaths(row, "candidate_paths", "sample_candidate"))}
+                    ${renderSplitAction(row, this.splitMessages[row._rowId])}
                     ${row.reason ? `<p><strong>Reason:</strong> ${escapeHtml(row.reason)}</p>` : ""}
                     ${row.rating_key ? `<p><strong>Plex key:</strong> ${escapeHtml(row.rating_key)}</p>` : ""}
                   </div>
@@ -198,6 +273,43 @@ class ReportDataGrid {
         this.render();
       });
     });
+
+    this.container.querySelectorAll(".split-plex-btn").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.confirmSplit(button.dataset.rowId, button);
+      });
+    });
+  }
+
+  async confirmSplit(rowId, button) {
+    const row = this.rows.find((item) => item._rowId === rowId);
+    if (!row || this.splitInFlight) return;
+    const paths = distinctPaths(rowPaths(row, "plex_paths"));
+    if (!row.rating_key || paths.length < 2) return;
+    if (!window.confirm(splitConfirmText(row.title, paths))) return;
+
+    this.splitInFlight = rowId;
+    button.disabled = true;
+    try {
+      const result = await api("/api/plex/split", {
+        method: "POST",
+        body: JSON.stringify({ rating_key: String(row.rating_key) }),
+      });
+      this.splitMessages[rowId] = {
+        ok: true,
+        text: result?.message || "Split in Plex. Run a new dry run to refresh this report.",
+      };
+    } catch (error) {
+      this.splitMessages[rowId] = {
+        ok: false,
+        text: error?.message || "Plex could not split this item.",
+      };
+    } finally {
+      this.splitInFlight = null;
+    }
+    this.render();
   }
 }
 
@@ -245,7 +357,15 @@ function renderJsonTree(value, depth = 0) {
 }
 
 function renderJsonPanel(container, data) {
-  const topKeys = ["media_type", "scan_mode", "ready_count", "candidate_count", "needs_review_count", "groups"];
+  const topKeys = [
+    "media_type",
+    "scan_mode",
+    "ready_count",
+    "candidate_count",
+    "protected_count",
+    "needs_review_count",
+    "groups",
+  ];
   const summary = topKeys
     .filter((k) => k in data)
     .map((k) => {
