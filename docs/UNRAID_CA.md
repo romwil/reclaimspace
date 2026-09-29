@@ -8,7 +8,7 @@ This guide walks through listing **Reclaimspace** in the official Unraid **Commu
 |-------------|--------|
 | Public GitHub repo `romwil/reclaimspace` | Required |
 | OSI license ([MIT](../LICENSE)) | Required |
-| Docker image on Docker Hub `romwil/reclaimspace:latest` and `romwil/reclaimspace:1.2.0` | Required |
+| Docker image on Docker Hub `romwil/reclaimspace:latest` and `romwil/reclaimspace:1.3.0` | Required |
 | `ca_profile.xml` in repo root (non-empty `<Profile>`) | Included |
 | `templates/reclaimspace.xml` with valid `TemplateURL`, `<Description>`, `:latest` image | Included |
 | Icon `reclaimspace_icon.jpg` at repo root | Included |
@@ -55,8 +55,8 @@ Add repository secrets (Settings → Secrets and variables → Actions):
 
 Then either:
 
-- Push a version tag: `git tag v1.2.1 && git push origin v1.2.1` (runs [.github/workflows/release.yml](../.github/workflows/release.yml)), or
-- **Actions** → **Release** → **Run workflow** and enter the version (e.g. `1.2.0`).
+- Push a version tag: `git tag v1.3.0 && git push origin v1.3.0` (runs [.github/workflows/release.yml](../.github/workflows/release.yml)), or
+- **Actions** → **Release** → **Run workflow** and enter the version (e.g. `1.3.0`).
 
 One-time setup from the CLI:
 
@@ -75,7 +75,7 @@ gh secret set DOCKERHUB_TOKEN --body "YOUR_DOCKER_HUB_TOKEN"
 
 | Issue | Fix |
 |-------|-----|
-| Image pull fails | Push `romwil/reclaimspace:latest` and `romwil/reclaimspace:1.2.0` |
+| Image pull fails | Push `romwil/reclaimspace:latest` and `romwil/reclaimspace:1.3.0` |
 | Missing `<Description>` | Use `templates/reclaimspace.xml` on `main` |
 | Invalid `TemplateURL` | Must be raw GitHub URL to `templates/reclaimspace.xml` |
 | Empty `<Profile>` | Edit `ca_profile.xml` |

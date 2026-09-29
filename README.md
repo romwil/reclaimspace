@@ -1,7 +1,7 @@
 # Reclaimspace
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-green.svg)](https://github.com/romwil/reclaimspace/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/romwil/reclaimspace/releases)
 
 Reclaim disk space from duplicate media files in Plex libraries while keeping the single file Radarr or Sonarr manages.
 
@@ -20,7 +20,7 @@ Plex sometimes indexes more than one file per movie or episode (leftovers after 
 ## Screenshots (web UI)
 
 - **Dashboard** — run dry-run / quarantine, jobs, reports, restore
-- **Reports** — search, filter by status, sort columns, expand rows for full paths
+- **Reports** — opens on Ready, search, filter by status, sort columns, expand every path, Split in Plex
 - **Configuration** — Plex, Radarr, Sonarr, paths, webhooks, schedule
 
 See [docs/WEB_UI.md](docs/WEB_UI.md).
@@ -55,7 +55,7 @@ Open **http://your-server:8777/** — complete the setup wizard, run a **dry run
 | Unraid Community Applications | [docs/UNRAID_CA.md](docs/UNRAID_CA.md) |
 | Release & Docker Hub publish | [docs/RELEASE.md](docs/RELEASE.md) |
 
-**Docker Hub:** `romwil/reclaimspace` (tags `latest`, `1.2.0`)
+**Docker Hub:** `romwil/reclaimspace` (tags `latest`, `1.3.0`)
 
 **Do not commit** `config/settings.json` — it contains API tokens (gitignored).
 
@@ -125,6 +125,7 @@ python3 -m unittest discover -s tests
 
 | Version | Notes |
 |---------|--------|
+| [v1.3.0](https://github.com/romwil/reclaimspace/releases/tag/v1.3.0) | Ready grid, protected count, Split in Plex |
 | [v1.2.0](https://github.com/romwil/reclaimspace/releases/tag/v1.2.0) | Wizard, reports grid, config page, CA metadata |
 | [v1.1.0](https://github.com/romwil/reclaimspace/releases/tag/v1.1.0) | Web UI, Docker |
 | [v1.0.0](https://github.com/romwil/reclaimspace/releases/tag/v1.0.0) | CLI |

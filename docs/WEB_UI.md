@@ -32,13 +32,13 @@ Click a completed job to open its report. Progress bar and phase text appear whi
 1. Select a report from the left list.
 2. Use the **Data** tab for the interactive grid:
    - **Search** — title, status, paths, reason
-   - **Status** filter — all, ready, needs_review, etc.
-   - **Column headers** — click to sort (click again to reverse)
-   - **Row click** — expand full keep/duplicate paths
+   - **Status** filter — opens on **Ready** (rows with something to quarantine). Switch to All statuses, Protected, or Needs review.
+   - **Column headers** — click to sort (click again to reverse). **Candidates** counts quarantine candidate paths only.
+   - **Row click** — expand every Plex path, every protected path, and every candidate path. When a group has two or more Plex paths, **Split in Plex** separates them into individual library items, the same as Split in the Plex client. Confirm first; the prompt lists the full paths. Split does not move or delete files and does not change Radarr or Sonarr. It separates every file on that Plex item, including an intentional two-part movie. Afterward, run a new dry run — the open report does not update itself.
 3. Use the **JSON** tab for a structured tree view of the raw report.
 4. **Download** saves the JSON file.
 
-Summary chips above the grid show ready count, candidates, needs review, quarantined, and missing-on-disk totals.
+Summary chips above the grid show ready, candidates, protected, needs review, quarantined, and missing-on-disk totals. Protected is the number of groups with nothing safe to quarantine. Older reports that omit `protected_count` still show that chip; the count is taken from the groups.
 
 ### Restore from quarantine
 

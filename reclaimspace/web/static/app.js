@@ -73,6 +73,7 @@ function renderJobItem(job) {
     detail = status === "running" ? "Scan in progress…" : "Waiting to start…";
   } else {
     detail = `Ready ${summary.ready_count ?? 0} · Candidates ${summary.candidate_count ?? 0}`;
+    if (summary.protected_count != null) detail += ` · Protected ${summary.protected_count}`;
     if (summary.quarantined_count) detail += ` · Moved ${summary.quarantined_count}`;
     if (summary.needs_review_count) detail += ` · Review ${summary.needs_review_count}`;
   }
@@ -115,10 +116,18 @@ async function loadJobs() {
   });
 }
 
-function renderReportSummary(data) {
+function protectedGroupCount(data, groups) {
+  if (data && data.protected_count != null) return Number(data.protected_count);
+  const source = groups || data?.groups;
+  if (!Array.isArray(source)) return 0;
+  return source.filter((group) => group.status === "protected").length;
+}
+
+function renderReportSummary(data, groups) {
   const chips = [
     { label: "Ready", value: data.ready_count ?? 0, class: "highlight" },
     { label: "Candidates", value: data.candidate_count ?? 0, class: "" },
+    { label: "Protected", value: protectedGroupCount(data, groups), class: "" },
     { label: "Needs review", value: data.needs_review_count ?? 0, class: data.needs_review_count ? "warn" : "" },
   ];
   if (data.quarantined_count != null && data.quarantined_count > 0) {
@@ -168,11 +177,17 @@ function setReportTab(tab) {
 
 async function loadReportGrid(name) {
   const table = await api(`/api/reports/${encodeURIComponent(name)}/groups?limit=10000`);
+  if (reportGrid && reportGrid.reportName !== name) {
+    reportGrid.filters.status = "ready";
+    reportGrid.filters.search = "";
+    reportGrid.reportName = name;
+  }
   if (!table.groups?.length) {
     reportGridEl.innerHTML = "<p class='hint'>No groups in this report.</p>";
-    return;
+    return table;
   }
   reportGrid.setRows(table.groups);
+  return table;
 }
 
 function showReportPane() {
@@ -211,10 +226,16 @@ async function viewReport(name) {
     reportHumanSummary.classList.remove("hidden");
 
     if (activeReportTab === "grid") {
-      await loadReportGrid(name);
+      const table = await loadReportGrid(name);
+      if (summary.protected_count == null && table?.groups) {
+        reportSummary.innerHTML = renderReportSummary(summary, table.groups);
+      }
       reportGridEl.classList.remove("hidden");
     } else {
       cachedRawReport = await api(`/api/reports/${encodeURIComponent(name)}`);
+      if (summary.protected_count == null) {
+        reportSummary.innerHTML = renderReportSummary(summary, cachedRawReport?.groups);
+      }
       renderJsonPanel(reportJsonEl, cachedRawReport);
       reportJsonEl.classList.remove("hidden");
     }

@@ -64,7 +64,7 @@ Set **Movies root**, **TV root**, and **Quarantine root** in **Configuration** t
 ```bash
 docker pull romwil/reclaimspace:latest
 # or a pinned release:
-docker pull romwil/reclaimspace:1.2.0
+docker pull romwil/reclaimspace:1.3.0
 ```
 
 Publishing new tags is documented in [RELEASE.md](RELEASE.md).

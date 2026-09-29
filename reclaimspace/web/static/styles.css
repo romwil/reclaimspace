@@ -1061,6 +1061,10 @@ code {
 .grid-detail-row td {
   background: var(--bg) !important;
   padding: 0 !important;
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: unset;
 }
 
 .grid-detail {
@@ -1071,6 +1075,36 @@ code {
 .grid-detail code {
   word-break: break-all;
   white-space: pre-wrap;
+}
+
+.grid-detail .path-list ul {
+  margin: 0.2rem 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.grid-detail .path-list li {
+  margin: 0.15rem 0;
+}
+
+.grid-detail .split-action {
+  margin: 0.35rem 0 0.85rem;
+}
+
+.grid-detail .split-note,
+.grid-detail .split-result {
+  margin: 0.4rem 0 0;
+}
+
+.grid-detail .split-note {
+  color: var(--text-muted);
+}
+
+.grid-detail .split-result.ok {
+  color: var(--success);
+}
+
+.grid-detail .split-result.error {
+  color: var(--danger);
 }
 
 .grid-empty {

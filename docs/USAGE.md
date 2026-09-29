@@ -17,7 +17,7 @@ Plex library scan
 | Status | Meaning |
 |--------|---------|
 | `ready` | At least one Plex file is protected by the *arr app; other files are quarantine candidates |
-| `protected` | All duplicate paths match managed files; nothing to quarantine |
+| `protected` | Every Plex path matches some current managed file, so nothing is safe to quarantine |
 | `needs_review` | Ambiguous case (e.g. no managed file match, or paths outside the configured root) |
 
 Quarantine only acts on `ready` groups.
@@ -25,10 +25,11 @@ Quarantine only acts on `ready` groups.
 ### Authority model
 
 - **Plex** decides *which items have duplicates* (multiple file parts for one movie or episode).
-- **Radarr / Sonarr** decide *which file is protected* (the managed file you want to keep).
+- **Radarr / Sonarr** decide *which paths are protected*. The protected set is every current managed file in the library: Radarr’s `movieFile` on each movie (one current file per movie), or Sonarr episode files still linked by `episodeFileId`. A match means “this path is some current managed file,” not “this title was imported twice.”
+- A group is `protected` when **each** of its Plex paths is in that set. Those paths can be different files — this title’s file and another title’s file, a merged Plex item, or two names that still point at distinct files. Quarantine skips the whole group.
 - **Reclaimspace** only moves files Plex lists that are *not* in the protected set.
 
-For TV, Sonarr’s protected set is built from each episode’s current `episodeFileId`, not every row returned by `/api/v3/episodefile` (which can include stale files after upgrades or renames).
+For TV, Sonarr’s protected set ignores episode-file rows that are no longer the episode’s current `episodeFileId` (stale files after upgrades or renames).
 
 ## Movies
 
@@ -42,6 +43,7 @@ python3 -m reclaimspace.media_duplicates \
 Review `reports/movies-dry-run.json`:
 
 - `ready_count` / `candidate_count` — how much would move
+- `protected_count` — groups where every path is a current managed file
 - `needs_review_count` — items to inspect manually
 - Per group: `plex_paths`, `protected_paths`, `candidate_paths`
 
@@ -141,6 +143,7 @@ Top-level fields (movies and TV):
 | `groups` | List of duplicate groups |
 | `ready_count` | Groups with status `ready` |
 | `candidate_count` | Total candidate file paths |
+| `protected_count` | Groups with status `protected` |
 | `needs_review_count` | Groups requiring manual review |
 | `quarantined_count` | Files moved (quarantine runs only) |
 | `quarantine_manifest` | Path to manifest JSON, or `null` |

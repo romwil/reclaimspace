@@ -1,13 +1,17 @@
+import io
 import json
 import os
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
 from reclaimspace.media_duplicates import (
     DuplicateGroup,
+    PlexClient,
     PlexPart,
+    RadarrClient,
     RadarrMovieFile,
     SonarrEpisodeFile,
     TV_PATH_PREFIXES,
@@ -20,6 +24,7 @@ from reclaimspace.media_duplicates import (
     normalize_media_path,
     parse_path_mappings,
     quarantine_files,
+    report_groups,
 )
 
 
@@ -101,6 +106,153 @@ class CandidateSelectionTests(unittest.TestCase):
         self.assertEqual(groups[0].protected_paths, [protected_file])
         self.assertEqual(groups[0].candidate_paths, [leftover_file])
         self.assertEqual(groups[0].status, "ready")
+
+    def test_protected_group_matches_the_library_wide_current_file_set(self):
+        this_movie = MOVIES_ROOT / "The Conjuring (2013)" / "managed.mkv"
+        other_movie = MOVIES_ROOT / "Insidious (2010)" / "managed.mkv"
+
+        groups = build_duplicate_groups(
+            plex_parts=[
+                PlexPart(
+                    rating_key="1",
+                    title="The Conjuring",
+                    year=2013,
+                    file_path=str(this_movie),
+                ),
+                PlexPart(
+                    rating_key="1",
+                    title="The Conjuring",
+                    year=2013,
+                    file_path=str(other_movie),
+                ),
+            ],
+            managed_files=[
+                RadarrMovieFile(
+                    movie_id=10,
+                    title="The Conjuring",
+                    year=2013,
+                    file_path=str(this_movie),
+                ),
+                RadarrMovieFile(
+                    movie_id=11,
+                    title="Insidious",
+                    year=2010,
+                    file_path=str(other_movie),
+                ),
+            ],
+            media_root=MOVIES_ROOT,
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].status, "protected")
+        self.assertEqual(groups[0].candidate_paths, [])
+        self.assertEqual(groups[0].protected_paths, [this_movie, other_movie])
+        self.assertEqual(
+            groups[0].reason,
+            (
+                "Plex lists multiple files and each path is a current Radarr movie file, "
+                "so nothing is safe to quarantine."
+            ),
+        )
+        plan = build_quarantine_plan(groups, MOVIES_ROOT, Path("/tmp/unused-quarantine"))
+        self.assertEqual(plan.moves, [])
+
+        payload = report_groups(groups)
+        self.assertEqual(payload["protected_count"], 1)
+        self.assertEqual(payload["ready_count"], 0)
+        self.assertEqual(payload["candidate_count"], 0)
+
+    def test_near_path_is_not_treated_as_the_managed_file(self):
+        protected_file = MOVIES_ROOT / "The Conjuring (2013)" / "managed.mkv"
+        similar = MOVIES_ROOT / "The Conjuring (2013)" / "managed.mkv.bak"
+
+        groups = build_duplicate_groups(
+            plex_parts=[
+                PlexPart("1", "The Conjuring", 2013, str(protected_file)),
+                PlexPart("1", "The Conjuring", 2013, str(similar)),
+            ],
+            managed_files=[
+                RadarrMovieFile(10, "The Conjuring", 2013, str(protected_file)),
+            ],
+            media_root=MOVIES_ROOT,
+        )
+
+        self.assertEqual(groups[0].status, "ready")
+        self.assertEqual(groups[0].protected_paths, [protected_file])
+        self.assertEqual(groups[0].candidate_paths, [similar])
+
+    def test_path_aliases_of_one_file_are_not_a_duplicate_group(self):
+        mappings = parse_path_mappings(
+            "/movies=/host/movies;/data/media/movies=/host/movies"
+        )
+
+        groups = build_duplicate_groups(
+            plex_parts=[
+                PlexPart("1", "Alien", 1979, "/movies/Alien (1979)/Alien.mkv"),
+                PlexPart(
+                    "1",
+                    "Alien",
+                    1979,
+                    "/data/media/movies/Alien (1979)/Alien.mkv",
+                ),
+            ],
+            managed_files=[
+                RadarrMovieFile(1, "Alien", 1979, "/movies/Alien (1979)/Alien.mkv"),
+            ],
+            media_root=Path("/host/movies"),
+            path_mappings=mappings,
+        )
+
+        self.assertEqual(groups, [])
+
+    def test_radarr_client_uses_only_the_current_movie_file(self):
+        payload = [
+            {
+                "id": 10,
+                "title": "The Conjuring",
+                "year": 2013,
+                "path": "/movies/The Conjuring (2013)",
+                "movieFile": {"path": "/movies/The Conjuring (2013)/current.mkv"},
+                "movieFileHistory": [
+                    {"path": "/movies/The Conjuring (2013)/deleted.mkv"}
+                ],
+            },
+            {"id": 11, "title": "Missing", "year": 2001, "movieFile": {}},
+        ]
+        with mock.patch(
+            "reclaimspace.media_duplicates._request_json", return_value=payload
+        ):
+            files = RadarrClient("http://radarr.example", "key").movie_files()
+
+        self.assertEqual(
+            [item.file_path for item in files],
+            ["/movies/The Conjuring (2013)/current.mkv"],
+        )
+
+    def test_sonarr_protected_reason_names_episode_files(self):
+        tv_root = Path("/mnt/user/data/media/tv")
+        episode = tv_root / "Show" / "Season 1" / "S01E01.mkv"
+        other = tv_root / "Other Show" / "Season 1" / "S01E01.mkv"
+
+        groups = build_duplicate_groups(
+            plex_parts=[
+                PlexPart("ep", "Show - S01E01", None, str(episode)),
+                PlexPart("ep", "Show - S01E01", None, str(other)),
+            ],
+            managed_files=[
+                SonarrEpisodeFile(1, "Show", 1, 10, str(episode)),
+                SonarrEpisodeFile(2, "Other Show", 1, 20, str(other)),
+            ],
+            media_root=tv_root,
+            arr_app_name="Sonarr",
+            arr_file_noun="episode file",
+            fallback_prefixes=TV_PATH_PREFIXES,
+        )
+
+        self.assertEqual(groups[0].status, "protected")
+        self.assertEqual(groups[0].candidate_paths, [])
+        self.assertIn("current Sonarr episode file", groups[0].reason)
+        self.assertIn("nothing is safe to quarantine", groups[0].reason)
 
     def test_sonarr_protection_uses_only_episode_file_ids_currently_linked_to_episodes(self):
         stale_file = SonarrEpisodeFile(
@@ -365,6 +517,67 @@ class NeedsReviewReportTests(unittest.TestCase):
         self.assertEqual(review_report["groups"][0]["title"], "Review Movie")
         self.assertEqual(review_report["groups"][0]["plex_file_count"], 2)
         self.assertNotIn("candidate_count", review_report)
+
+
+class _FakePlexResponse:
+    def __init__(self, body: bytes = b"") -> None:
+        self.body = body
+
+    def read(self) -> bytes:
+        return self.body
+
+    def __enter__(self) -> "_FakePlexResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+class PlexSplitClientTests(unittest.TestCase):
+    def test_split_puts_metadata_endpoint_with_token_header(self):
+        response = _FakePlexResponse(b"")
+        with mock.patch(
+            "reclaimspace.media_duplicates.urllib.request.urlopen",
+            return_value=response,
+        ) as urlopen:
+            PlexClient("http://plex.example", "secret-token").split_item("42")
+
+        request = urlopen.call_args.args[0]
+        headers = {name.lower(): value for name, value in request.header_items()}
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertEqual(
+            request.full_url, "http://plex.example/library/metadata/42/split"
+        )
+        self.assertEqual(headers["x-plex-token"], "secret-token")
+        self.assertNotIn("secret-token", request.full_url)
+        self.assertNotIn("X-Plex-Token=", request.full_url)
+        self.assertEqual(request.data, b"")
+
+    def test_split_rejects_a_non_numeric_rating_key_without_calling_plex(self):
+        with mock.patch(
+            "reclaimspace.media_duplicates.urllib.request.urlopen"
+        ) as urlopen:
+            with self.assertRaises(ValueError):
+                PlexClient("http://plex.example", "secret-token").split_item("42/../evil")
+        urlopen.assert_not_called()
+
+    def test_http_error_message_omits_the_token(self):
+        error = urllib.error.HTTPError(
+            "http://plex.example/library/metadata/42/split?X-Plex-Token=secret-token",
+            401,
+            "Unauthorized secret-token",
+            hdrs=None,
+            fp=io.BytesIO(b"secret-token"),
+        )
+        with mock.patch(
+            "reclaimspace.media_duplicates.urllib.request.urlopen",
+            side_effect=error,
+        ):
+            with self.assertRaises(RuntimeError) as caught:
+                PlexClient("http://plex.example", "secret-token").split_item("42")
+
+        self.assertEqual(str(caught.exception), "Plex refused the split (HTTP 401).")
+        self.assertNotIn("secret-token", str(caught.exception))
 
 
 if __name__ == "__main__":
