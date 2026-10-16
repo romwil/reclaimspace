@@ -63,6 +63,9 @@ _OMITTED_SETTING_FIELDS = (
 
 _appdata_scans: Dict[str, Dict[str, Any]] = {}
 _appdata_scans_lock = threading.Lock()
+_appdata_migrates: Dict[str, Dict[str, Any]] = {}
+_appdata_migrate_active: set[str] = set()
+_appdata_migrates_lock = threading.Lock()
 
 app = FastAPI(title="Reclaimspace", version=__version__)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -176,7 +179,10 @@ def config_page() -> HTMLResponse:
 
 @app.get("/appdata", response_class=HTMLResponse)
 def appdata_page() -> HTMLResponse:
-    return HTMLResponse((STATIC_DIR / "appdata.html").read_text(encoding="utf-8"))
+    return HTMLResponse(
+        (STATIC_DIR / "appdata.html").read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/api/health")
@@ -480,6 +486,137 @@ def appdata_scan_status(job_id: str) -> Dict[str, Any]:
         return {"status": job["status"], "error": job["error"], "result": job["result"]}
 
 
+def _update_appdata_migrate(job_id: str, **fields: Any) -> None:
+    with _appdata_migrates_lock:
+        job = _appdata_migrates.get(job_id)
+        if job is not None:
+            job.update(fields)
+
+
+def _release_appdata_migrate(names: List[str]) -> None:
+    with _appdata_migrates_lock:
+        for name in names:
+            _appdata_migrate_active.discard(name)
+
+
+def _run_appdata_migrate(job_id: str, names: List[str]) -> None:
+    """Move one folder at a time. A failure is recorded and is not success."""
+    _update_appdata_migrate(job_id, status="running")
+    migrated: List[Dict[str, Any]] = []
+    errors: List[Dict[str, str]] = []
+    total = len(names)
+    try:
+        for index, name in enumerate(names, start=1):
+            _update_appdata_migrate(
+                job_id,
+                progress={
+                    "current": name,
+                    "index": index,
+                    "total": total,
+                    "message": f"Moving {name}",
+                },
+            )
+            try:
+                settings = load_merged_settings(DATA_DIR)
+                mounts, prefixes = _fresh_mounts(settings)
+                outcome = migrate_workspace(
+                    appdata_root=Path(settings.appdata_root),
+                    code_root=Path(settings.code_root),
+                    names=[name],
+                    mounts=mounts,
+                    prefixes=prefixes,
+                    data_dir=DATA_DIR,
+                )
+                migrated.extend(outcome.get("migrated", []))
+            except Exception as error:  # noqa: BLE001 - stored on the job for the UI
+                errors.append({"name": name, "error": str(error)})
+        result = {"migrated": migrated, "errors": errors}
+        finished = {
+            "current": None,
+            "index": total,
+            "total": total,
+            "message": "Move finished" if not errors else "Move failed",
+        }
+        if errors:
+            summary = "; ".join(
+                f"{item['name']}: {item['error']}" if item.get("name") else item["error"]
+                for item in errors
+            )
+            _update_appdata_migrate(
+                job_id,
+                status="failed",
+                error=summary,
+                result=result,
+                progress=finished,
+            )
+        else:
+            _update_appdata_migrate(
+                job_id,
+                status="completed",
+                error=None,
+                result=result,
+                progress=finished,
+            )
+    except Exception as error:  # noqa: BLE001 - job status is the client-visible failure
+        _update_appdata_migrate(
+            job_id,
+            status="failed",
+            error=str(error),
+            result={"migrated": migrated, "errors": errors},
+        )
+    finally:
+        _release_appdata_migrate(names)
+
+
+@app.post("/api/appdata/migrate")
+def appdata_migrate(payload: AppdataNamesPayload) -> Dict[str, str]:
+    names = list(payload.names)
+    if not names:
+        raise HTTPException(status_code=400, detail="Choose at least one folder.")
+    if len(names) != len(set(names)):
+        raise HTTPException(status_code=400, detail="Duplicate folder in migration request.")
+    job_id = uuid.uuid4().hex[:12]
+    with _appdata_migrates_lock:
+        overlap = sorted(name for name in names if name in _appdata_migrate_active)
+        if overlap:
+            raise HTTPException(
+                status_code=409,
+                detail="Migration already running for: " + ", ".join(overlap),
+            )
+        _appdata_migrate_active.update(names)
+        _appdata_migrates[job_id] = {
+            "status": "queued",
+            "error": None,
+            "result": None,
+            "progress": {
+                "current": None,
+                "index": 0,
+                "total": len(names),
+                "message": "Queued",
+            },
+        }
+    threading.Thread(
+        target=_run_appdata_migrate,
+        args=(job_id, names),
+        daemon=True,
+    ).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/appdata/migrate/{job_id}")
+def appdata_migrate_status(job_id: str) -> Dict[str, Any]:
+    with _appdata_migrates_lock:
+        job = _appdata_migrates.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Migration not found.")
+        return {
+            "status": job["status"],
+            "error": job["error"],
+            "result": job["result"],
+            "progress": job.get("progress"),
+        }
+
+
 @app.get("/api/appdata/browse")
 def appdata_browse(path: str = Query(default="")) -> Any:
     settings = load_merged_settings(DATA_DIR)
@@ -555,24 +692,6 @@ def appdata_purge(payload: AppdataNamesPayload) -> Any:
     return _appdata_http(
         lambda: purge_archive(appdata_root=Path(settings.appdata_root), names=payload.names)
     )
-
-
-@app.post("/api/appdata/migrate")
-def appdata_migrate(payload: AppdataNamesPayload) -> Any:
-    settings = load_merged_settings(DATA_DIR)
-
-    def action() -> Any:
-        mounts, prefixes = _fresh_mounts(settings)
-        return migrate_workspace(
-            appdata_root=Path(settings.appdata_root),
-            code_root=Path(settings.code_root),
-            names=payload.names,
-            mounts=mounts,
-            prefixes=prefixes,
-            data_dir=DATA_DIR,
-        )
-
-    return _appdata_http(action)
 
 
 def _safe_report_path(report_name: str) -> Path:

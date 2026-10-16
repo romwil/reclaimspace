@@ -11,6 +11,7 @@ Settings is duck-typed (``appdata_root``, ``appdata_host_prefixes``,
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import posixpath
@@ -462,6 +463,87 @@ def purge_archive(appdata_root: Path, names: Sequence[str]) -> list[str]:
     return purged
 
 
+def _relocate_directory(source: Path, destination: Path, destination_root: Path) -> None:
+    """Move ``source`` to ``destination``.
+
+    Same-filesystem moves use ``rename``. A cross-device move copies bytes
+    and recreates symlinks, then removes the source. It does not call
+    ``chmod`` or ``utime``: on Unraid those become FUSE setattrs against
+    ``/mnt/user`` and can block forever. FIFOs, sockets, and device nodes
+    are refused without being opened.
+    """
+    try:
+        os.rename(source, destination)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+    try:
+        _copy_tree_without_metadata(source, destination)
+    except Exception:
+        _discard_tree(destination, destination_root)
+        raise
+    try:
+        shutil.rmtree(source)
+    except OSError as exc:
+        raise ValueError(
+            f"Copied {source.name} but could not remove the appdata folder: {exc}"
+        ) from exc
+
+
+def _copy_tree_without_metadata(source: Path, destination: Path) -> None:
+    destination.mkdir()
+    pending = [source]
+    while pending:
+        current = pending.pop()
+        relative = current.relative_to(source)
+        target_dir = destination / relative
+        with os.scandir(current) as entries:
+            for entry in entries:
+                dest = target_dir / entry.name
+                rel = Path(entry.path).relative_to(source).as_posix()
+                if dest.exists() or dest.is_symlink():
+                    raise ValueError(f"Destination already exists: {rel}")
+                try:
+                    info = entry.stat(follow_symlinks=False)
+                except OSError as exc:
+                    detail = exc.strerror or str(exc)
+                    raise ValueError(f"Could not read {rel}: {detail}") from exc
+                mode = info.st_mode
+                if stat.S_ISLNK(mode):
+                    os.symlink(os.readlink(entry.path), dest)
+                elif stat.S_ISDIR(mode):
+                    dest.mkdir()
+                    pending.append(Path(entry.path))
+                elif stat.S_ISREG(mode):
+                    try:
+                        shutil.copyfile(entry.path, dest, follow_symlinks=False)
+                    except OSError as exc:
+                        detail = exc.strerror or str(exc)
+                        raise ValueError(f"Could not copy {rel}: {detail}") from exc
+                elif stat.S_ISFIFO(mode):
+                    raise ValueError(f"Refusing to copy a FIFO: {rel}")
+                elif stat.S_ISSOCK(mode):
+                    raise ValueError(f"Refusing to copy a socket: {rel}")
+                else:
+                    raise ValueError(f"Refusing to copy a special file: {rel}")
+
+
+def _discard_tree(destination: Path, destination_root: Path) -> None:
+    """Remove an incomplete destination this move created. Leave anything else."""
+    root = destination_root.resolve()
+    if destination.is_symlink():
+        if destination.parent.resolve() == root:
+            destination.unlink()
+        return
+    if not destination.exists():
+        return
+    resolved = destination.resolve()
+    if resolved == root or resolved.parent != root or not _is_within(resolved, root):
+        return
+    shutil.rmtree(destination)
+
+
 def migrate_workspace(
     appdata_root: Path,
     code_root: Path,
@@ -497,9 +579,10 @@ def migrate_workspace(
         }
         _write_json(manifest_path, record)
         try:
-            shutil.move(str(source), str(destination))
+            _relocate_directory(source, destination, destination_root)
         except Exception:
-            manifest_path.unlink(missing_ok=True)
+            if not destination.exists() and not destination.is_symlink():
+                manifest_path.unlink(missing_ok=True)
             raise
         migrated.append(
             {

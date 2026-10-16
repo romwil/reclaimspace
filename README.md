@@ -1,7 +1,7 @@
 # Reclaimspace
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.2-green.svg)](https://github.com/romwil/reclaimspace/releases)
+[![Version](https://img.shields.io/badge/version-1.4.3-green.svg)](https://github.com/romwil/reclaimspace/releases)
 
 Reclaim disk space from duplicate media files in Plex libraries while keeping the single file Radarr or Sonarr manages.
 
@@ -56,7 +56,7 @@ Open **http://your-server:8777/** — complete the setup wizard, run a **dry run
 | Unraid Community Applications | [docs/UNRAID_CA.md](docs/UNRAID_CA.md) |
 | Release & Docker Hub publish | [docs/RELEASE.md](docs/RELEASE.md) |
 
-**Docker Hub:** `romwil/reclaimspace` (tags `latest`, `1.4.2`)
+**Docker Hub:** `romwil/reclaimspace` (tags `latest`, `1.4.3`)
 
 **Do not commit** `config/settings.json` — it contains API tokens (gitignored).
 
@@ -127,6 +127,7 @@ python3 -m unittest discover -s tests
 
 | Version | Notes |
 |---------|--------|
+| [v1.4.3](https://github.com/romwil/reclaimspace/releases/tag/v1.4.3) | Appdata migrate runs in the background |
 | [v1.4.2](https://github.com/romwil/reclaimspace/releases/tag/v1.4.2) | Appdata ignores a mount of the whole share |
 | [v1.4.1](https://github.com/romwil/reclaimspace/releases/tag/v1.4.1) | Saved Unraid API URL and key stay visible to Appdata |
 | [v1.4.0](https://github.com/romwil/reclaimspace/releases/tag/v1.4.0) | Appdata leftovers, migrate, quarantine |

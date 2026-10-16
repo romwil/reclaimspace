@@ -338,10 +338,11 @@ function failScan(message) {
   updateButtons();
 }
 
-function applyScanResult(result) {
+function applyScanResult(result, options) {
   if (!result || !Array.isArray(result.candidates) || !Array.isArray(result.in_use)) {
     throw new Error("Scan finished without a folder list.");
   }
+  const quiet = Boolean(options && options.quiet);
   scanState = "ready";
   scanError = "";
   candidates = result.candidates.map(asCandidate).filter((row) => row.name);
@@ -352,7 +353,9 @@ function applyScanResult(result) {
   renderSummary();
   renderCandidates();
   renderInUse();
-  setToast(scanStatus, `Scan complete. ${candidates.length} unused, ${inUse.length} in use.`, "ok");
+  if (!quiet) {
+    setToast(scanStatus, `Scan complete. ${candidates.length} unused, ${inUse.length} in use.`, "ok");
+  }
   updateButtons();
 }
 
@@ -599,6 +602,53 @@ async function runCandidateAction(path, names, verb, refreshArchive) {
   }
 }
 
+async function pollMigrate(jobId) {
+  for (;;) {
+    const data = await api(`/api/appdata/migrate/${encodeURIComponent(jobId)}`);
+    if (!isFailedStatus(data) && !isDoneStatus(data)) {
+      const progress = data && data.progress;
+      const current = progress && (progress.current || progress.folder);
+      const total = progress && progress.total;
+      const index = progress && progress.index;
+      let message = "Moving…";
+      if (current) {
+        message = total ? `Moving ${current} (${index} of ${total})…` : `Moving ${current}…`;
+      } else if (progress && progress.message) {
+        message = String(progress.message);
+      }
+      setToast(scanStatus, message, "loading");
+      await delay(1000);
+      continue;
+    }
+    if (isFailedStatus(data)) {
+      const result = data && data.result;
+      const collected = collectErrors(result || {});
+      const message = collected.errors.length
+        ? collected.errors.join(" ")
+        : String((data && data.error) || "Migrate failed.");
+      const error = new Error(message);
+      error.result = result;
+      throw error;
+    }
+    return data && data.result;
+  }
+}
+
+async function refreshScanInPlace() {
+  const payload = await api("/api/appdata/scan", { method: "POST", body: "{}" });
+  const jobId = payload && (payload.job_id || payload.id);
+  if (!jobId) throw new Error("Scan did not return a job id.");
+  for (;;) {
+    const data = await api(`/api/appdata/scan/${encodeURIComponent(jobId)}`);
+    if (isFailedStatus(data)) throw new Error(String((data && data.error) || "Scan failed."));
+    if (isDoneStatus(data)) {
+      applyScanResult(data && data.result, { quiet: true });
+      return;
+    }
+    await delay(1000);
+  }
+}
+
 async function migrateSelected() {
   if (busy || scanning) return;
   const selected = selectedCandidateRows();
@@ -623,12 +673,62 @@ async function migrateSelected() {
     message += `\n\nThese selected folders are not code and will stay:\n${others.join("\n")}`;
   }
   if (!window.confirm(message)) return;
-  await runCandidateAction(
-    "/api/appdata/migrate",
-    code.map((row) => row.name),
-    "Moved",
-    false
-  );
+  const names = code.map((row) => row.name);
+  busy = true;
+  updateButtons();
+  setToast(scanStatus, "Moving…", "loading");
+  try {
+    const payload = await api("/api/appdata/migrate", {
+      method: "POST",
+      body: JSON.stringify({ names }),
+    });
+    const jobId = payload && (payload.job_id || payload.id);
+    if (!jobId) throw new Error("Migrate did not return a job id.");
+    const result = await pollMigrate(String(jobId));
+    const { errors, failed } = collectErrors(result);
+    const moved = (namesFrom(result, ["migrated"]) || []).filter((name) => !failed.has(name));
+    if (moved.length) dropCandidates(moved);
+    const notes = [];
+    try {
+      await loadArchive();
+    } catch (error) {
+      notes.push(error.message);
+    }
+    try {
+      await refreshScanInPlace();
+    } catch (error) {
+      notes.push(error.message);
+    }
+    const movedLabel = moved.length ? moved.join(", ") : names.join(", ");
+    if (errors.length) {
+      const prefix = moved.length ? `Moved ${moved.join(", ")}. ` : "";
+      setToast(scanStatus, `${prefix}${errors.join(" ")}`, "error");
+    } else if (notes.length) {
+      setToast(scanStatus, `Moved ${movedLabel}. ${notes.join(" ")}`, "error");
+    } else {
+      setToast(scanStatus, `Moved ${movedLabel}.`, "ok");
+    }
+  } catch (error) {
+    const result = error && error.result;
+    if (result) {
+      const moved = namesFrom(result, ["migrated"]) || [];
+      if (moved.length) dropCandidates(moved);
+      try {
+        await loadArchive();
+      } catch {
+        /* the migrate error stays visible */
+      }
+      try {
+        await refreshScanInPlace();
+      } catch {
+        /* the migrate error stays visible */
+      }
+    }
+    setToast(scanStatus, error.message || "Migrate failed.", "error");
+  } finally {
+    busy = false;
+    updateButtons();
+  }
 }
 
 async function quarantineSelected() {

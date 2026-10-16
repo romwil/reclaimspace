@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.3] - 2026-10-16
+
+### Fixed
+
+- Appdata **Migrate** no longer leaves the page on “Moved…” while a cross-filesystem copy runs. The move starts in the background, the page shows which folder is moving, and the buttons come back when it finishes or fails. The error text names the folder. Mounts are checked again immediately before each folder. A folder that fails does not count as a successful move. If the destination is already there, or the source is already gone, nothing is merged. Copying onto the code share does not `chmod` the destination, and a FIFO or socket is refused instead of opened. Quarantine, delete, and purge are unchanged.
+
 ## [1.4.2] - 2026-10-16
 
 ### Fixed
