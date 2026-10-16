@@ -23,6 +23,12 @@ ENV_TO_FIELD = {
     "TV_PATH_MAPPINGS": "tv_path_mappings",
     "PLEX_MOVIE_SECTION": "plex_movie_section",
     "PLEX_TV_SECTION": "plex_tv_section",
+    "APPDATA_ROOT": "appdata_root",
+    "APPDATA_HOST_PREFIXES": "appdata_host_prefixes",
+    "CODE_ROOT": "code_root",
+    "UNRAID_API_URL": "unraid_api_url",
+    "UNRAID_API_KEY": "unraid_api_key",
+    "DOCKER_SOCKET": "docker_socket",
 }
 
 FIELD_TO_ENV = {value: key for key, value in ENV_TO_FIELD.items()}
@@ -55,6 +61,12 @@ class Settings:
     schedule_dry_run_enabled: bool = False
     schedule_dry_run_interval_hours: int = 168
     schedule_dry_run_media_type: str = "movies"
+    appdata_root: str = "/appdata"
+    appdata_host_prefixes: str = "/mnt/user/appdata;/mnt/cache/appdata"
+    code_root: str = "/code"
+    unraid_api_url: str = "http://10.10.1.202/graphql"
+    unraid_api_key: str = ""
+    docker_socket: str = ""
 
     def to_env(self) -> Dict[str, str]:
         payload = {
@@ -71,6 +83,12 @@ class Settings:
             "TV_PATH_MAPPINGS": self.tv_path_mappings,
             "PLEX_MOVIE_SECTION": self.plex_movie_section,
             "PLEX_TV_SECTION": self.plex_tv_section,
+            "APPDATA_ROOT": self.appdata_root,
+            "APPDATA_HOST_PREFIXES": self.appdata_host_prefixes,
+            "CODE_ROOT": self.code_root,
+            "UNRAID_API_URL": self.unraid_api_url,
+            "UNRAID_API_KEY": self.unraid_api_key,
+            "DOCKER_SOCKET": self.docker_socket,
         }
         return {key: value for key, value in payload.items() if value is not None}
 
