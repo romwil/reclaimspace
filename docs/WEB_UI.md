@@ -2,13 +2,13 @@
 
 Reclaimspace serves a browser UI on port **8777** (Docker default). The CLI and web app share the same media scan logic.
 
-The UI has two modes. **Media** quarantines Plex duplicates and never deletes files. **Appdata** lists leftover folders on the appdata share and can quarantine, migrate, or permanently delete them.
+The UI has two modes. **Media** quarantines Plex duplicate files and never deletes those files. It can also quarantine library folders that are missing from both the manager app and Plex, then purge only those folders. **Appdata** lists leftover folders on the appdata share and can quarantine, migrate, or permanently delete them.
 
 ## Pages
 
 | URL | Purpose |
 |-----|---------|
-| `/` | **Media** — run scans, jobs, reports, quarantine restore |
+| `/` | **Media** — run scans, jobs, reports, orphan folders, quarantine restore |
 | `/appdata` | **Appdata** — unused appdata folders, migrate, quarantine, delete |
 | `/config` | **Configuration** — Plex, Radarr, Sonarr, paths, notifications, schedule, Appdata |
 
@@ -22,7 +22,7 @@ Existing installs with saved credentials are marked onboarded automatically. Use
 
 ## Media
 
-Media is the duplicate workflow: Movies and TV scans, jobs, the report grid, Plex Split, and media quarantine restore. It moves files into quarantine. It never deletes them.
+Media is the duplicate workflow plus orphan folders: Movies and TV scans, jobs, the report grid, Plex Split, duplicate quarantine restore, and an orphan-folder scan. Duplicate scans move files into quarantine. They never delete files.
 
 ### Run scan
 
@@ -48,6 +48,18 @@ Summary chips above the grid show ready, candidates, protected, needs review, qu
 ### Restore from quarantine
 
 Lists rollback manifests under your media quarantine folder. **Preview restore** is a dry run; **Restore** moves files back to their original paths. Appdata `_archive` restore is on the Appdata page.
+
+### Orphan folders
+
+A folder is listed only when it is missing from both the manager app and Plex. Movies use Radarr. TV uses Sonarr. A folder that either one still has is left on disk. If Radarr, Sonarr, or Plex cannot be read, the scan stops and lists nothing.
+
+Choose **Movies** or **TV**, then **Orphan folders**. The scan runs in the background. Candidates show largest first, with a checkbox and the folder size. **Select all** and **Select none** apply to that list. **Quarantine** asks you to confirm, and the confirmation names each folder, then moves those folders into the media quarantine area. This does not move duplicate files.
+
+Loose files sitting directly in the library folder are shown for information. They have no checkbox and stay where they are.
+
+**Orphan quarantine** lists only those moved folders. **Restore** moves a folder back. If the original name is already there, that folder stays in quarantine and the page says so. **Purge** permanently deletes the selected folders. The confirmation lists each folder and its size. Purge does not delete duplicate-file quarantine.
+
+Duplicate scans still never delete files.
 
 ## Appdata
 
@@ -79,7 +91,7 @@ Lists `_archive` entries. **Select all** and **Select none** apply to this list.
 - **Restore** moves a folder back to the appdata root. If that name is already occupied, restore stops for that folder and says so.
 - **Purge** permanently deletes the selected archive folders and their manifests. The confirmation lists each folder and its size.
 
-**Delete** and **Purge** are permanent. Media scans never delete files.
+**Delete** and **Purge** are permanent. Duplicate media scans never delete files. On the Media page, **Purge** deletes only quarantined orphan folders.
 
 ## Configuration
 

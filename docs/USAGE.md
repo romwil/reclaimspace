@@ -116,6 +116,16 @@ mv "<destination>" "<source>"
 
 Use the paths from the manifest for the run you want to undo.
 
+## Orphan folders
+
+On the Media page, **Orphan folders** lists top-level movie or TV folders on disk. A folder is listed only when it is missing from both the manager app and Plex. Movies use Radarr. TV uses Sonarr. A folder that Radarr, Sonarr, or Plex still knows about stays on disk and is not listed.
+
+If Radarr, Sonarr, or Plex cannot be read, the scan fails and lists nothing. That failure is not the same as a folder missing from both sides.
+
+Loose files sitting directly in the library folder are reported and left in place. They are not folders you can quarantine.
+
+**Quarantine** moves the folders you select into the media quarantine area. The confirmation names each folder. **Restore** moves a folder back. If the original name is already occupied, that folder stays in quarantine. **Purge** permanently deletes the selected orphan-folder quarantine entries. The confirmation lists each folder and its size. Purge does not purge duplicate-file quarantines. Duplicate scans still never delete files.
+
 ## Running on Unraid with Docker
 
 Host Python may be outdated; use a Python 3.10+ container and mount your media paths:

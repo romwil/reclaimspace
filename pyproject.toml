@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reclaimspace"
-version = "1.4.4"
+version = "1.5.0"
 description = "Safely quarantine Plex media duplicates not managed by Radarr or Sonarr."
 readme = "README.md"
 license = { text = "MIT" }

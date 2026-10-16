@@ -1,11 +1,11 @@
 # Reclaimspace
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.4-green.svg)](https://github.com/romwil/reclaimspace/releases)
+[![Version](https://img.shields.io/badge/version-1.5.0-green.svg)](https://github.com/romwil/reclaimspace/releases)
 
 Reclaim disk space from duplicate media files in Plex libraries while keeping the single file Radarr or Sonarr manages.
 
-Plex sometimes indexes more than one file per movie or episode (leftovers after upgrades, renames, or manual copies). Reclaimspace asks Plex which items have duplicates, asks your *arr app which file is authoritative, and **quarantines** everything else. Media files move to a timestamped quarantine folder with a manifest for rollback. They are not deleted. **Appdata** is a separate page for leftover folders on the appdata share.
+Plex sometimes indexes more than one file per movie or episode (leftovers after upgrades, renames, or manual copies). Reclaimspace asks Plex which items have duplicates, asks your *arr app which file is authoritative, and **quarantines** everything else. Media files move to a timestamped quarantine folder with a manifest for rollback. They are not deleted. **Orphan folders** on the Media page lists a top-level movie or TV folder only when both the manager and Plex are missing it. **Appdata** is a separate page for leftover folders on the appdata share.
 
 ## Features
 
@@ -15,6 +15,7 @@ Plex sometimes indexes more than one file per movie or episode (leftovers after 
 | **Appdata** | Unused appdata folders: quarantine, migrate code to `/code`, or delete after you confirm |
 | **Movies** | Plex + Radarr duplicate detection and quarantine |
 | **TV** | Plex (paged) + Sonarr (`episodeFileId` only) |
+| **Orphan folders** | Top-level movie or TV folders missing from both the manager and Plex |
 | **Safety** | Dry run by default; needs-review queue for ambiguous items |
 | **Unraid** | CA-ready template, `docker-run.sh` without Compose |
 
@@ -56,7 +57,7 @@ Open **http://your-server:8777/** — complete the setup wizard, run a **dry run
 | Unraid Community Applications | [docs/UNRAID_CA.md](docs/UNRAID_CA.md) |
 | Release & Docker Hub publish | [docs/RELEASE.md](docs/RELEASE.md) |
 
-**Docker Hub:** `romwil/reclaimspace` (tags `latest`, `1.4.4`)
+**Docker Hub:** `romwil/reclaimspace` (tags `latest`, `1.5.0`)
 
 **Do not commit** `config/settings.json` — it contains API tokens (gitignored).
 
@@ -95,7 +96,8 @@ The setup wizard can generate typical Unraid mappings automatically.
 
 ## Safety
 
-- Media never deletes files—only moves to `QUARANTINE_ROOT/<run-id>/`
+- Duplicate scans never delete files—only move them to `QUARANTINE_ROOT/<run-id>/`
+- Orphan-folder **Purge** deletes only those quarantined folders, and only after you confirm each name
 - Appdata refuses any folder a container still mounts. **Delete** and **Purge** are permanent, and only after you confirm the folder names
 - Does not quarantine Radarr/Sonarr-managed files
 - Skips single-file Plex items
@@ -127,6 +129,7 @@ python3 -m unittest discover -s tests
 
 | Version | Notes |
 |---------|--------|
+| [v1.5.0](https://github.com/romwil/reclaimspace/releases/tag/v1.5.0) | Orphan movie and TV folders missing from the manager and Plex |
 | [v1.4.4](https://github.com/romwil/reclaimspace/releases/tag/v1.4.4) | Remove empty appdata folders, including empty subfolders |
 | [v1.4.3](https://github.com/romwil/reclaimspace/releases/tag/v1.4.3) | Appdata migrate runs in the background |
 | [v1.4.2](https://github.com/romwil/reclaimspace/releases/tag/v1.4.2) | Appdata ignores a mount of the whole share |

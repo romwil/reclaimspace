@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.5.0] - 2026-10-16
+
+### Added
+
+- **Orphan folders** on the Media page lists a top-level movie or TV folder only when it is missing from both the manager and Plex. Movies use Radarr. TV uses Sonarr. If Radarr, Sonarr, or Plex cannot be read, the scan stops and lists nothing. Loose files in the library folder are shown and left in place. **Quarantine** moves the folders you confirm into the existing media quarantine root with kind `orphan_folder`. **Restore** moves a folder back and stops when the original name is already occupied. **Purge** permanently deletes only those orphan-folder quarantine entries. Duplicate scans still never delete files.
+
 ## [1.4.4] - 2026-10-16
 
 ### Fixed

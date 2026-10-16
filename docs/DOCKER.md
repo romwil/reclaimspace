@@ -103,7 +103,7 @@ If neither the Unraid API nor an explicit socket is available, the scan fails. I
 ```bash
 docker pull romwil/reclaimspace:latest
 # or a pinned release:
-docker pull romwil/reclaimspace:1.4.4
+docker pull romwil/reclaimspace:1.5.0
 ```
 
 Publishing new tags is documented in [RELEASE.md](RELEASE.md).

@@ -63,6 +63,8 @@ _OMITTED_SETTING_FIELDS = (
 
 _appdata_scans: Dict[str, Dict[str, Any]] = {}
 _appdata_scans_lock = threading.Lock()
+_orphan_scans: Dict[str, Dict[str, Any]] = {}
+_orphan_scans_lock = threading.Lock()
 _appdata_migrates: Dict[str, Dict[str, Any]] = {}
 _appdata_migrate_active: set[str] = set()
 _appdata_migrates_lock = threading.Lock()
@@ -102,6 +104,19 @@ class SettingsPayload(BaseModel):
 class ScanRequest(BaseModel):
     media_type: Literal["movies", "tv"]
     mode: Literal["dry_run", "quarantine"]
+
+
+class OrphanScanRequest(BaseModel):
+    media_type: Literal["movies", "tv"]
+
+
+class OrphanQuarantineRequest(BaseModel):
+    media_type: Literal["movies", "tv"]
+    names: List[str] = Field(default_factory=list)
+
+
+class OrphanNamesRequest(BaseModel):
+    names: List[str] = Field(default_factory=list)
 
 
 class PathsPayload(BaseModel):
@@ -423,6 +438,236 @@ def quarantine_restore(request: RestoreRequest) -> Dict[str, object]:
         return restore_from_manifest(manifest, dry_run=request.dry_run)
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _orphan_module() -> Any:
+    import reclaimspace.orphans as orphans
+
+    return orphans
+
+
+def _public_error(error: BaseException, settings: Optional[Settings] = None) -> str:
+    text = str(error).strip() or "Request failed."
+    if settings is not None:
+        for secret in (settings.plex_token, settings.radarr_api_key, settings.sonarr_api_key):
+            if secret:
+                text = text.replace(secret, "[redacted]")
+    line = text.splitlines()[0]
+    if len(line) > 300:
+        line = line[:300].rstrip()
+    return line
+
+
+def _require_orphan_settings(settings: Settings, media_type: str) -> None:
+    if not settings.plex_url or not settings.plex_token:
+        raise ValueError("Plex URL and token are required.")
+    if media_type == "movies":
+        if not settings.radarr_url or not settings.radarr_api_key:
+            raise ValueError("Radarr URL and API key are required.")
+        if not str(settings.movies_root).strip():
+            raise ValueError("Movies root is required.")
+        return
+    if not settings.sonarr_url or not settings.sonarr_api_key:
+        raise ValueError("Sonarr URL and API key are required.")
+    if not str(settings.tv_root).strip():
+        raise ValueError("TV root is required.")
+    if not str(settings.plex_tv_section).strip():
+        raise ValueError("Plex TV library is required.")
+
+
+def _orphan_library(settings: Settings, media_type: str) -> tuple[Path, str]:
+    """Return the library root and the raw path-mapping string for that library."""
+    if media_type == "movies":
+        return Path(settings.movies_root), settings.path_mappings
+    return Path(settings.tv_root), settings.tv_path_mappings
+
+
+def _plex_file_paths(settings: Settings, media_type: str) -> List[str]:
+    if media_type == "movies":
+        parts = PlexClient(
+            settings.plex_url,
+            settings.plex_token,
+            movie_section=settings.plex_movie_section or None,
+        ).movie_parts()
+    else:
+        if not settings.plex_tv_section:
+            raise ValueError("Plex TV library is required.")
+        parts = PlexClient(settings.plex_url, settings.plex_token).tv_episode_parts(
+            settings.plex_tv_section,
+            page_size=settings.tv_page_size,
+        )
+    return [part.file_path for part in parts if part.file_path]
+
+
+def _load_orphan_sources(settings: Settings, media_type: str) -> tuple[Any, List[str]]:
+    """Read the manager library and Plex. A failure here must not be classified."""
+    orphans = _orphan_module()
+    try:
+        if media_type == "movies":
+            manager_paths = orphans.fetch_radarr_folders(
+                settings.radarr_url, settings.radarr_api_key
+            )
+        else:
+            manager_paths = orphans.fetch_sonarr_folders(
+                settings.sonarr_url, settings.sonarr_api_key
+            )
+    except orphans.OrphanSourceError:
+        raise
+    except ValueError:
+        raise
+    except Exception as error:  # noqa: BLE001 - source outage must not look like a match
+        raise orphans.OrphanSourceError(_public_error(error, settings)) from error
+
+    try:
+        plex_paths = _plex_file_paths(settings, media_type)
+    except orphans.OrphanSourceError:
+        raise
+    except ValueError:
+        raise
+    except Exception as error:  # noqa: BLE001 - source outage must not look like a match
+        raise orphans.OrphanSourceError(_public_error(error, settings)) from error
+    return manager_paths, plex_paths
+
+
+def _orphan_http(action: Callable[[], Any]) -> Any:
+    orphans = _orphan_module()
+    try:
+        return jsonable_encoder(action())
+    except orphans.OrphanSourceError as error:
+        settings = load_merged_settings(DATA_DIR)
+        detail = _public_error(error, settings) or "Media source is unavailable."
+        raise HTTPException(status_code=503, detail=detail) from error
+    except ValueError as error:
+        detail = str(error).strip() or "Invalid orphan folder request."
+        raise HTTPException(status_code=400, detail=detail) from error
+
+
+def _update_orphan_scan(job_id: str, **fields: Any) -> None:
+    with _orphan_scans_lock:
+        job = _orphan_scans.get(job_id)
+        if job is not None:
+            job.update(fields)
+
+
+def _run_orphan_scan(job_id: str, media_type: str) -> None:
+    """Classify orphan folders in memory. Does not write a duplicate report."""
+    _update_orphan_scan(job_id, status="running")
+    settings: Optional[Settings] = None
+    try:
+        settings = load_merged_settings(DATA_DIR)
+        _require_orphan_settings(settings, media_type)
+        library_root, mappings = _orphan_library(settings, media_type)
+        manager_paths, plex_paths = _load_orphan_sources(settings, media_type)
+        result = _orphan_module().classify_orphans(
+            library_root, manager_paths, plex_paths, mappings
+        )
+        _update_orphan_scan(
+            job_id,
+            status="completed",
+            error=None,
+            result=jsonable_encoder(result),
+        )
+    except Exception as error:  # noqa: BLE001 - returned by the scan status route
+        _update_orphan_scan(
+            job_id,
+            status="failed",
+            error=_public_error(error, settings),
+            result=None,
+        )
+
+
+def _require_orphan_names(names: List[str]) -> None:
+    if not names:
+        raise ValueError("Choose at least one folder.")
+
+
+def _require_quarantine_root(settings: Settings) -> Path:
+    if not str(settings.quarantine_root).strip():
+        raise ValueError("Quarantine root is required.")
+    return Path(settings.quarantine_root)
+
+
+@app.post("/api/media/orphans/scan")
+def orphan_scan(request: OrphanScanRequest) -> Dict[str, str]:
+    settings = load_merged_settings(DATA_DIR)
+    try:
+        _require_orphan_settings(settings, request.media_type)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    job_id = uuid.uuid4().hex[:12]
+    with _orphan_scans_lock:
+        _orphan_scans[job_id] = {"status": "queued", "error": None, "result": None}
+    threading.Thread(
+        target=_run_orphan_scan,
+        args=(job_id, request.media_type),
+        daemon=True,
+    ).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/media/orphans/scan/{job_id}")
+def orphan_scan_status(job_id: str) -> Dict[str, Any]:
+    with _orphan_scans_lock:
+        job = _orphan_scans.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Scan not found.")
+        return {"status": job["status"], "error": job["error"], "result": job["result"]}
+
+
+@app.post("/api/media/orphans/quarantine")
+def orphan_quarantine(payload: OrphanQuarantineRequest) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        _require_orphan_names(payload.names)
+        quarantine_root = _require_quarantine_root(settings)
+        _require_orphan_settings(settings, payload.media_type)
+        library_root, mappings = _orphan_library(settings, payload.media_type)
+        manager_paths, plex_paths = _load_orphan_sources(settings, payload.media_type)
+        return _orphan_module().quarantine_orphan_folders(
+            library_root,
+            quarantine_root,
+            payload.names,
+            manager_paths,
+            plex_paths,
+            mappings,
+        )
+
+    return _orphan_http(action)
+
+
+@app.get("/api/media/orphans/quarantine")
+def orphan_quarantine_list() -> Any:
+    settings = load_merged_settings(DATA_DIR)
+    return _orphan_http(
+        lambda: _orphan_module().list_orphan_quarantine(_require_quarantine_root(settings))
+    )
+
+
+@app.post("/api/media/orphans/restore")
+def orphan_restore(payload: OrphanNamesRequest) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        _require_orphan_names(payload.names)
+        return _orphan_module().restore_orphan_folders(
+            _require_quarantine_root(settings), payload.names
+        )
+
+    return _orphan_http(action)
+
+
+@app.post("/api/media/orphans/purge")
+def orphan_purge(payload: OrphanNamesRequest) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        _require_orphan_names(payload.names)
+        return _orphan_module().purge_orphan_folders(
+            _require_quarantine_root(settings), payload.names
+        )
+
+    return _orphan_http(action)
 
 
 def _appdata_http(action: Callable[[], Any]) -> Any:
