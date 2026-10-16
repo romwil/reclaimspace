@@ -1,5 +1,7 @@
+import errno
 import json
 import os
+import shutil
 import socket
 import tempfile
 import threading
@@ -603,6 +605,112 @@ class FilesystemActionTests(unittest.TestCase):
             self.assertEqual((project / "src.txt").read_text(encoding="utf-8"), "code")
             self.assertEqual((code / "tool" / "existing.txt").read_text(encoding="utf-8"), "mine")
             self.assertTrue((plain / "a.txt").is_file())
+
+    def test_cross_device_copy_skips_metadata_and_recreates_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "appdata"
+            code = Path(tmp) / "code"
+            data = Path(tmp) / "data"
+            project = root / "tool"
+            nested = project / "src"
+            nested.mkdir(parents=True)
+            (project / ".git").mkdir()
+            (nested / "main.txt").write_text("code", encoding="utf-8")
+            (project / "link").symlink_to("src/main.txt")
+
+            def cross_device(_source: str, _destination: str) -> None:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+            with (
+                mock.patch("reclaimspace.appdata.os.rename", side_effect=cross_device),
+                mock.patch("shutil.copystat", side_effect=AssertionError("copystat")),
+                mock.patch("os.chmod", side_effect=AssertionError("chmod")),
+            ):
+                result = migrate_workspace(root, code, ["tool"], [], PREFIXES, data)
+
+            self.assertEqual(result["errors"], [])
+            self.assertFalse(project.exists())
+            self.assertEqual(
+                (code / "tool" / "src" / "main.txt").read_text(encoding="utf-8"),
+                "code",
+            )
+            link = code / "tool" / "link"
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(os.readlink(link), "src/main.txt")
+            self.assertFalse((root / ARCHIVE_NAME).exists())
+
+    def test_cross_device_fifo_is_refused_without_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "appdata"
+            code = Path(tmp) / "code"
+            data = Path(tmp) / "data"
+            project = root / "tool"
+            project.mkdir(parents=True)
+            (project / ".git").mkdir()
+            (project / "keep.txt").write_text("stay", encoding="utf-8")
+            os.mkfifo(project / "pipe")
+            holder: dict[str, Exception | None] = {}
+
+            def cross_device(_source: str, _destination: str) -> None:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+            def run() -> None:
+                try:
+                    migrate_workspace(root, code, ["tool"], [], PREFIXES, data)
+                except Exception as exc:  # noqa: BLE001 - asserted on the test thread
+                    holder["error"] = exc
+                else:
+                    holder["error"] = None
+
+            with mock.patch("reclaimspace.appdata.os.rename", side_effect=cross_device):
+                worker = threading.Thread(target=run)
+                worker.start()
+                worker.join(2)
+
+            self.assertFalse(worker.is_alive(), "migrate blocked while copying a FIFO")
+            error = holder.get("error")
+            self.assertIsInstance(error, ValueError)
+            self.assertIn("FIFO", str(error))
+            self.assertEqual((project / "keep.txt").read_text(encoding="utf-8"), "stay")
+            self.assertFalse((code / "tool").exists())
+            audit = data / "appdata-migrations"
+            self.assertFalse(audit.exists() and any(audit.glob("tool*.json")))
+
+    def test_completed_migrate_is_not_merged_on_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "appdata"
+            code = Path(tmp) / "code"
+            data = Path(tmp) / "data"
+            project = root / "tool"
+            project.mkdir(parents=True)
+            (project / ".git").mkdir()
+            (project / "src.txt").write_text("moved", encoding="utf-8")
+
+            migrate_workspace(root, code, ["tool"], [], PREFIXES, data)
+            (code / "tool" / "src.txt").write_text("already there", encoding="utf-8")
+            revived = root / "tool"
+            revived.mkdir()
+            (revived / ".git").mkdir()
+            (revived / "src.txt").write_text("new source", encoding="utf-8")
+
+            with self.assertRaises(ValueError) as both_present:
+                migrate_workspace(root, code, ["tool"], [], PREFIXES, data)
+            self.assertIn("exists", str(both_present.exception))
+            self.assertEqual((revived / "src.txt").read_text(encoding="utf-8"), "new source")
+            self.assertEqual(
+                (code / "tool" / "src.txt").read_text(encoding="utf-8"),
+                "already there",
+            )
+
+            shutil.rmtree(revived)
+            self.assertFalse(revived.exists())
+            with self.assertRaises(ValueError) as source_missing:
+                migrate_workspace(root, code, ["tool"], [], PREFIXES, data)
+            self.assertIn("does not exist", str(source_missing.exception))
+            self.assertEqual(
+                (code / "tool" / "src.txt").read_text(encoding="utf-8"),
+                "already there",
+            )
 
     def test_restore_reports_occupied_name_without_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

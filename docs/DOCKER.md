@@ -94,7 +94,7 @@ If neither the Unraid API nor an explicit socket is available, the scan fails. I
 
 ### Workspace migrate
 
-**Migrate** moves a whole unused top-level folder from `/appdata/<name>` to `/code/<name>` (host `/mnt/user/data/code/<name>`). A `.git` directory is enough to mark it as code. Otherwise the folder needs at least two of `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, a `*.sln` file, or `.code-workspace`. The **Code** badge is advisory. Nothing moves until you confirm, and a container that still mounts the folder blocks the move.
+**Migrate** moves a whole unused top-level folder from `/appdata/<name>` to `/code/<name>` (host `/mnt/user/data/code/<name>`). A `.git` directory is enough to mark it as code. Otherwise the folder needs at least two of `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, a `*.sln` file, or `.code-workspace`. The **Code** badge is advisory. Nothing moves until you confirm, and a container that still mounts the folder blocks the move. The move runs in the background: the page names the folder in progress and restores the buttons when it finishes or fails. Each folder is checked again just before it moves. A destination that already exists, or a source that is already gone, stops that folder and does not merge the two trees.
 
 **Delete** and **Purge** are permanent. **Media** never deletes files.
 
@@ -103,7 +103,7 @@ If neither the Unraid API nor an explicit socket is available, the scan fails. I
 ```bash
 docker pull romwil/reclaimspace:latest
 # or a pinned release:
-docker pull romwil/reclaimspace:1.4.2
+docker pull romwil/reclaimspace:1.4.3
 ```
 
 Publishing new tags is documented in [RELEASE.md](RELEASE.md).
