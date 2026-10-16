@@ -337,29 +337,125 @@ def delete_folders(
     return deleted
 
 
+class _FolderNotEmpty(Exception):
+    """A file, symlink, socket, FIFO, or other non-directory is present."""
+
+
 def remove_empty_top_level(
     appdata_root: Path,
     mounts: Sequence[ContainerMount],
     prefixes: Sequence[str],
-) -> list[str]:
-    """Remove top-level directories that contain nothing.
+) -> dict[str, object]:
+    """Remove top-level directories that contain no files.
 
-    Skips ``_archive`` and any folder a container still mounts.
+    A folder is empty when every entry under it is a real directory.
+    Empty subdirectories are removed with it. Symlinks are not followed.
+    Sockets, FIFOs, device nodes, and symlinks count as content and keep
+    the folder. Skips ``_archive`` and any folder a container still mounts.
+
+    Returns ``removed`` names, ``skipped_in_use`` (empty folders left
+    because a container mounts them), and ``errors`` for folders that
+    could not be read or removed.
     """
     root = _existing_dir(appdata_root)
     names = _real_top_level_names(root)
     usage = _usage_map(names, mounts, prefixes)
     removed: list[str] = []
+    skipped_in_use = 0
+    errors: list[dict[str, str]] = []
     for name in names:
-        if usage.get(name):
-            continue
-        folder = root / name
         try:
-            next(folder.iterdir())
-        except StopIteration:
-            folder.rmdir()
-            removed.append(name)
-    return removed
+            folder = _direct_child(root, name)
+            if not folder.is_dir() or folder.is_symlink():
+                continue
+            _collect_real_directories(folder)
+        except _FolderNotEmpty:
+            continue
+        except ValueError as exc:
+            errors.append({"name": name, "error": str(exc)})
+            continue
+        except OSError as exc:
+            errors.append({"name": name, "error": _folder_error("read", name, exc)})
+            continue
+        if usage.get(name):
+            skipped_in_use += 1
+            continue
+        try:
+            _remove_empty_tree(folder, root)
+        except _FolderNotEmpty:
+            continue
+        except (OSError, ValueError) as exc:
+            detail = exc if isinstance(exc, ValueError) else _folder_error("remove", name, exc)
+            errors.append({"name": name, "error": str(detail)})
+            continue
+        if folder.exists() or folder.is_symlink():
+            errors.append({"name": name, "error": f"Could not remove {name}."})
+            continue
+        removed.append(name)
+    return {"removed": removed, "skipped_in_use": skipped_in_use, "errors": errors}
+
+
+def _folder_error(verb: str, name: str, exc: OSError) -> str:
+    detail = exc.strerror or str(exc)
+    return f"Could not {verb} {name}: {detail}"
+
+
+def _collect_real_directories(folder: Path) -> list[Path]:
+    """List ``folder`` and real directories under it, parents before children.
+
+    Raises ``_FolderNotEmpty`` when anything other than a real directory is
+    present. Symlinks are not followed. Listing failures raise ``OSError``.
+    """
+    directories = [folder]
+    index = 0
+    while index < len(directories):
+        current = directories[index]
+        index += 1
+        try:
+            mode = current.lstat().st_mode
+        except OSError:
+            raise
+        if not stat.S_ISDIR(mode) or stat.S_ISLNK(mode):
+            raise _FolderNotEmpty()
+        try:
+            children = list(current.iterdir())
+        except OSError:
+            raise
+        for child in children:
+            try:
+                child_mode = child.lstat().st_mode
+            except OSError:
+                raise
+            if stat.S_ISDIR(child_mode) and not stat.S_ISLNK(child_mode):
+                directories.append(child)
+                continue
+            raise _FolderNotEmpty()
+    return directories
+
+
+def _remove_empty_tree(folder: Path, root: Path) -> None:
+    """Remove ``folder`` when it contains only real directories.
+
+    Every path has to stay inside ``folder``, which has to stay inside
+    ``root``. Symlinks are not followed or removed.
+    """
+    resolved_root = root.resolve()
+    if folder.is_symlink() or not stat.S_ISDIR(folder.lstat().st_mode):
+        raise ValueError(f"Path escapes the root: {folder.name}")
+    resolved_folder = folder.resolve()
+    if resolved_folder.parent != resolved_root or not _is_within(resolved_folder, resolved_root):
+        raise ValueError(f"Path escapes the root: {folder.name}")
+    directories = _collect_real_directories(folder)
+    for directory in reversed(directories):
+        if directory.is_symlink():
+            raise ValueError(f"Path escapes the root: {folder.name}")
+        directory_mode = directory.lstat().st_mode
+        if not stat.S_ISDIR(directory_mode):
+            raise OSError(errno.ENOTEMPTY, "Directory is not empty", str(directory))
+        resolved = directory.resolve()
+        if not _is_within(resolved, resolved_folder):
+            raise ValueError(f"Path escapes the root: {folder.name}")
+        os.rmdir(directory)
 
 
 def list_archive(appdata_root: Path) -> list[dict[str, object]]:

@@ -747,11 +747,23 @@ async function deleteSelected() {
   await runCandidateAction("/api/appdata/delete", names, "Deleted", false);
 }
 
+function emptyRemovalMessage(removed, skippedInUse) {
+  const count = removed.length;
+  let message =
+    count === 0
+      ? "No empty top-level folders."
+      : `Removed ${count} empty folder${count === 1 ? "" : "s"}.`;
+  if (skippedInUse > 0) {
+    message += ` Left ${skippedInUse} empty folder${skippedInUse === 1 ? "" : "s"} that a container still mounts.`;
+  }
+  return message;
+}
+
 async function removeEmpty() {
   if (busy || scanning) return;
   if (
     !window.confirm(
-      "Remove empty top-level appdata folders?\n\nOnly directories with nothing inside are removed. _archive and any folder a container still mounts are skipped."
+      "Remove empty top-level appdata folders?\n\nA folder is removed when it has no files anywhere inside it. Empty subfolders are removed with it. _archive and any folder a container still mounts are skipped."
     )
   ) {
     return;
@@ -761,21 +773,25 @@ async function removeEmpty() {
   setToast(scanStatus, "Removing empty folders…", "loading");
   try {
     const result = await api("/api/appdata/empty", { method: "POST", body: "{}" });
-    const { errors, failed } = collectErrors(result);
     const removed = namesFrom(result, ["removed", "names", "deleted", "emptied"]);
-    if (removed) dropCandidates(removed.filter((name) => !failed.has(name)));
-    if (errors.length) setToast(scanStatus, errors.join(" "), "error");
-    else if (removed) {
-      setToast(
-        scanStatus,
-        `Removed ${removed.length} empty folder${removed.length === 1 ? "" : "s"}.`,
-        "ok"
-      );
-    } else {
-      setToast(scanStatus, "Removed empty folders.", "ok");
+    if (!removed) throw new Error("Empty-folder result could not be read.");
+    const { errors, failed } = collectErrors(result);
+    const gone = removed.filter((name) => !failed.has(name));
+    if (gone.length) dropCandidates(gone);
+    const skippedRaw =
+      result && typeof result === "object" && !Array.isArray(result) ? Number(result.skipped_in_use) : 0;
+    const skipped = Number.isFinite(skippedRaw) && skippedRaw > 0 ? skippedRaw : 0;
+    const message = emptyRemovalMessage(gone, skipped);
+    if (errors.length) setToast(scanStatus, `${message} ${errors.join(" ")}`, "error");
+    else setToast(scanStatus, message, "ok");
+    try {
+      await refreshScanInPlace();
+    } catch (error) {
+      const prefix = scanStatus && scanStatus.textContent ? `${scanStatus.textContent} ` : "";
+      setToast(scanStatus, `${prefix}${error.message || "Scan failed."}`, "error");
     }
   } catch (error) {
-    setToast(scanStatus, error.message, "error");
+    setToast(scanStatus, error.message || "Remove empty folders failed.", "error");
   } finally {
     busy = false;
     updateButtons();
