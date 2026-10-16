@@ -183,10 +183,11 @@ async function saveSettings() {
     const payload = readSettingsForm();
     payload.onboarding_complete = true;
     payload.setup_wizard_pending = false;
-    await api("/api/settings", {
+    const saved = await api("/api/settings", {
       method: "PUT",
       body: JSON.stringify(payload),
     });
+    fillSettingsForm(saved);
     setToast(settingsStatus, "Settings saved.", "ok");
   } catch (error) {
     setToast(settingsStatus, error.message, "error");

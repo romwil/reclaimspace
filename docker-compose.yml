@@ -9,7 +9,8 @@ services:
     environment:
       DATA_DIR: /config
       PORT: "8777"
-      # Optional: seed settings from env on first run (overrides settings.json when set)
+      # Optional seed. Non-empty values override settings.json.
+      # Blank values do not erase a saved setting. A saved Unraid API URL or key is kept.
       PLEX_URL: ${PLEX_URL:-}
       PLEX_TOKEN: ${PLEX_TOKEN:-}
       PLEX_MOVIE_SECTION: ${PLEX_MOVIE_SECTION:-}

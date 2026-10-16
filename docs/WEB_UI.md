@@ -88,7 +88,7 @@ Open **Configuration** in the header (or `/config`).
 - Settings persist to `settings.json` under your config volume (`/config` in Docker).
 - Secrets are **masked** when loaded; leave token fields blank on save to keep existing values.
 - **Plex libraries** loads section keys you can apply to movie/TV library fields.
-- **Appdata** — **Appdata root**, **Code root**, **Host prefixes**, **Unraid API URL**, a masked **Unraid API key**, and an optional **Docker socket**. Create the key in Unraid with only `DOCKER:READ_ANY`. Leave the key blank on save to keep the stored value. **Test Unraid API** checks that Docker can be read and does not list mounts. Leave **Docker socket** empty unless you set `DOCKER_SOCKET`. Without the Unraid API or that socket, Appdata scan fails closed.
+- **Appdata** — **Appdata root**, **Code root**, **Host prefixes**, **Unraid API URL**, a masked **Unraid API key**, and an optional **Docker socket**. Create the key in Unraid with only `DOCKER:READ_ANY`. Leave the key blank on save to keep the stored value. After **Save**, the URL stays filled in and the key field shows that a key is already saved. **Test Unraid API** checks that Docker can be read and does not list mounts. Leave **Docker socket** empty unless you set `DOCKER_SOCKET`. Without the Unraid API or that socket, Appdata scan fails closed.
 - **Setup wizard** re-opens the first-run flow. The wizard stays on Media; the Unraid key lives on Configuration.
 
 ## Security

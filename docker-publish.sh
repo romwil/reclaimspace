@@ -1,5 +1,6 @@
 #!/bin/sh
 # Build and push Reclaimspace to Docker Hub (romwil/reclaimspace).
+# Publishes linux/amd64 so Unraid can run the image. A host-arch build on Apple Silicon cannot.
 set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,9 +13,6 @@ fi
 
 IMAGE="${DOCKER_IMAGE:-romwil/reclaimspace}"
 
-echo "Building ${IMAGE}:${VERSION} and ${IMAGE}:latest ..."
-docker build -t "${IMAGE}:${VERSION}" -t "${IMAGE}:latest" .
-
 if ! docker info 2>/dev/null | grep -q 'Username:'; then
   echo ""
   echo "Not logged in to Docker Hub. Run:"
@@ -23,10 +21,13 @@ if ! docker info 2>/dev/null | grep -q 'Username:'; then
   exit 1
 fi
 
-echo "Pushing ${IMAGE}:${VERSION} ..."
-docker push "${IMAGE}:${VERSION}"
-echo "Pushing ${IMAGE}:latest ..."
-docker push "${IMAGE}:latest"
+echo "Building and pushing ${IMAGE}:${VERSION} and ${IMAGE}:latest (linux/amd64) ..."
+docker buildx build \
+  --platform linux/amd64 \
+  -t "${IMAGE}:${VERSION}" \
+  -t "${IMAGE}:latest" \
+  --push \
+  .
 
 echo ""
 echo "Published:"

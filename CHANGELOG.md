@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.1] - 2026-10-15
+
+### Fixed
+
+- Configuration **Save** keeps the Unraid API URL and key, and the next Appdata scan reads those saved values. A blank container variable such as `UNRAID_API_KEY` no longer replaces a value stored in `settings.json`. The template default `UNRAID_API_URL` no longer hides a URL saved in the UI. Reload still masks the key and shows that a key is saved.
+
 ## [1.4.0] - 2026-10-15
 
 ### Added
