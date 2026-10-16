@@ -66,7 +66,7 @@ Set **Movies root**, **TV root**, and **Quarantine root** in **Configuration** t
 
 ## Appdata
 
-Appdata reads container mounts, then works on the filesystem mounts above. Host paths `/mnt/user/appdata/<name>` and `/mnt/cache/appdata/<name>` are the same folder inside `/appdata`. Sizing, explore, migrate, quarantine, delete, and restore use those mounts. A mount of the whole share protects every folder.
+Appdata reads container mounts, then works on the filesystem mounts above. Host paths `/mnt/user/appdata/<name>` and `/mnt/cache/appdata/<name>` are the same folder inside `/appdata`. Sizing, explore, migrate, quarantine, delete, and restore use those mounts. A mount of the share root, with no folder after the prefix, does not mark every folder in use. Reclaimspace mounts `/mnt/cache/appdata` so it can read the share; that mount is ignored. A folder stays in use when any container, running or stopped, mounts that folder or a path inside it.
 
 ### Unraid API key
 
@@ -103,7 +103,7 @@ If neither the Unraid API nor an explicit socket is available, the scan fails. I
 ```bash
 docker pull romwil/reclaimspace:latest
 # or a pinned release:
-docker pull romwil/reclaimspace:1.4.1
+docker pull romwil/reclaimspace:1.4.2
 ```
 
 Publishing new tags is documented in [RELEASE.md](RELEASE.md).

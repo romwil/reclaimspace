@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.2] - 2026-10-16
+
+### Fixed
+
+- Appdata no longer treats a mount of the share root (`/mnt/user/appdata` or `/mnt/cache/appdata` with no child folder) as protecting every top-level folder. Reclaimspace mounts that share so it can scan; that mount was marking leftover folders as in use. A folder is in use only when a container, running or stopped, bind-mounts that folder or a path inside it. Scan still stops when mount discovery fails, and `_archive` stays out of the unused list.
+
 ## [1.4.1] - 2026-10-15
 
 ### Fixed

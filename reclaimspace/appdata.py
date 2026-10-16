@@ -212,8 +212,9 @@ def classify_appdata(
 ) -> dict[str, list[dict[str, object]]]:
     """Split top-level folders into sized candidates and in-use rows.
 
-    ``_archive`` is omitted. A mount of an entire host prefix marks every
-    real top-level directory in use. Candidates are sorted by size, largest
+    ``_archive`` is omitted. A mount of a host prefix with no child segment
+    does not mark folders in use. A folder is in use only when a mount names
+    that folder or a path inside it. Candidates are sorted by size, largest
     first.
     """
     root = _existing_dir(appdata_root)
@@ -692,24 +693,21 @@ def _usage_map(
     mounts: Sequence[ContainerMount],
     prefixes: Sequence[str],
 ) -> dict[str, list[str]]:
-    """Folder name to container names. Every ``names`` entry is in use when any mount is the whole share."""
+    """Folder name to container names.
+
+    An exact host-prefix mount (the share root, with no child segment) is
+    ignored. A folder is in use only when a mount names that folder or a
+    path inside it, including mounts from stopped containers.
+    """
     cleaned = _require_prefixes(prefixes)
-    whole: set[str] = set()
     specific: dict[str, set[str]] = {}
     for mount in mounts:
         folder = mount_folder_name(mount.source, cleaned)
-        if folder is None:
+        if not folder:
             continue
         container = (mount.container or "").strip().lstrip("/") or "unknown"
-        if folder == "":
-            whole.add(container)
-        else:
-            specific.setdefault(folder, set()).add(container)
+        specific.setdefault(folder, set()).add(container)
     usage: dict[str, list[str]] = {}
-    if whole:
-        for name in names:
-            usage[name] = sorted(whole | specific.get(name, set()))
-        return usage
     for name in names:
         containers = specific.get(name)
         if containers:
