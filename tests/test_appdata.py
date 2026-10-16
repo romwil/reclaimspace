@@ -164,28 +164,33 @@ class WorkspaceDetectionTests(unittest.TestCase):
 
 
 class ClassifyTests(unittest.TestCase):
-    def test_whole_share_mount_protects_every_real_folder(self) -> None:
+    def test_exact_prefix_mount_leaves_unnamed_folders_unused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "plex").mkdir()
+            (root / "sonarr").mkdir()
             (root / "unused").mkdir()
             (root / ARCHIVE_NAME).mkdir()
             (root / "notes.txt").write_text("ignore", encoding="utf-8")
             mounts = [
-                _mount("proxy", "/mnt/user/appdata"),
+                _mount("reclaimspace", "/mnt/cache/appdata"),
+                _mount("proxy", "/mnt/user/appdata/"),
                 _mount("plex", "/mnt/cache/appdata/plex"),
+                _mount("sonarr", "/mnt/user/appdata/sonarr/config", state="exited"),
             ]
 
             report = classify_appdata(root, PREFIXES, mounts)
 
-        self.assertEqual(report["candidates"], [])
+        self.assertEqual([row["name"] for row in report["candidates"]], ["unused"])
         self.assertEqual(
             report["in_use"],
             [
-                {"name": "plex", "containers": ["plex", "proxy"]},
-                {"name": "unused", "containers": ["proxy"]},
+                {"name": "plex", "containers": ["plex"]},
+                {"name": "sonarr", "containers": ["sonarr"]},
             ],
         )
+        self.assertNotIn(ARCHIVE_NAME, [row["name"] for row in report["candidates"]])
+        self.assertNotIn(ARCHIVE_NAME, [row["name"] for row in report["in_use"]])
 
     def test_candidates_are_sized_descending_and_archive_is_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

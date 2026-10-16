@@ -51,7 +51,7 @@ Lists rollback manifests under your media quarantine folder. **Preview restore**
 
 ## Appdata
 
-Open **Appdata** in the header (or `/appdata`). A top-level folder is **in use** when any container, running or stopped, bind-mounts that folder or anything inside it. Unraid may record the same share as `/mnt/user/appdata/<name>` or `/mnt/cache/appdata/<name>`; both match the folder name. A mount of the whole share covers every folder. `_archive` is never a candidate.
+Open **Appdata** in the header (or `/appdata`). A top-level folder is **in use** when any container, running or stopped, bind-mounts that folder or anything inside it. Unraid may record the same share as `/mnt/user/appdata/<name>` or `/mnt/cache/appdata/<name>`; both match the folder name. A mount of the share itself, with no folder after `/mnt/user/appdata` or `/mnt/cache/appdata`, does not mark every folder in use. Reclaimspace mounts the share so it can scan, and that mount is ignored. `_archive` is never a candidate.
 
 ### Scan
 
