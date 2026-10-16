@@ -39,7 +39,7 @@
         <div class="card-header">
           <div>
             <h2 id="scan-heading">Run scan</h2>
-            <p class="card-subtitle">Dry run first, then quarantine when counts look right.</p>
+            <p class="card-subtitle">Dry run first, then quarantine duplicates when counts look right. Orphan folders lists library folders missing from both the manager app and Plex.</p>
           </div>
         </div>
         <div class="scan-panel">
@@ -60,9 +60,15 @@
               Quarantine
             </button>
           </div>
+          <div class="scan-actions orphan-scan-actions">
+            <button type="button" id="orphan-scan" class="btn btn-scan dry">
+              <span class="btn-icon" aria-hidden="true">▤</span>
+              <span id="orphan-scan-label">Orphan folders</span>
+            </button>
+          </div>
         </div>
         <p class="safety-note">
-          <strong>Safe by design:</strong> nothing is deleted. Quarantine moves files to a timestamped folder with a rollback manifest.
+          <strong>Safe by design:</strong> duplicate scans never delete files. Quarantine moves duplicate files to a timestamped folder with a rollback manifest.
         </p>
         <p id="scan-status" class="toast-area" role="status" aria-live="polite"></p>
       </section>
@@ -117,6 +123,45 @@
         </div>
         <div id="manifest-list" class="manifest-list"></div>
         <p id="restore-status" class="toast-area"></p>
+      </section>
+
+      <section class="card span-2" aria-labelledby="orphan-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="orphan-heading">Orphan folders</h2>
+            <p class="card-subtitle">A folder is listed only when it is missing from both the manager app and Plex. Movies use Radarr. TV uses Sonarr.</p>
+          </div>
+        </div>
+        <p id="orphan-result-note" class="card-subtitle"></p>
+        <div class="appdata-toolbar">
+          <button type="button" id="orphan-select-all" class="btn ghost btn-sm">Select all</button>
+          <button type="button" id="orphan-select-none" class="btn ghost btn-sm">Select none</button>
+          <button type="button" id="orphan-quarantine" class="btn secondary btn-sm" disabled>Quarantine</button>
+        </div>
+        <div id="orphan-candidates" class="appdata-list" role="list"></div>
+        <div id="orphan-loose-wrap" class="hidden">
+          <p id="orphan-loose-heading" class="orphan-loose-heading">Loose files in the library folder. They are not selectable and stay in place.</p>
+          <div id="orphan-loose" class="appdata-list" role="list"></div>
+        </div>
+        <p id="orphan-status" class="toast-area" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card span-2" aria-labelledby="orphan-quarantine-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="orphan-quarantine-heading">Orphan quarantine</h2>
+            <p class="card-subtitle">Folders moved by the orphan scan. Restore puts one back. Purge deletes it permanently. Duplicate-file quarantine is not purged here, and duplicate scans never delete files.</p>
+          </div>
+          <button type="button" id="refresh-orphan-quarantine" class="btn ghost btn-sm" title="Refresh orphan quarantine">↻</button>
+        </div>
+        <div class="appdata-toolbar">
+          <button type="button" id="orphan-quarantine-select-all" class="btn ghost btn-sm">Select all</button>
+          <button type="button" id="orphan-quarantine-select-none" class="btn ghost btn-sm">Select none</button>
+          <button type="button" id="orphan-restore" class="btn secondary btn-sm" disabled>Restore</button>
+          <button type="button" id="orphan-purge" class="btn danger btn-sm" disabled>Purge</button>
+        </div>
+        <div id="orphan-quarantine-list" class="appdata-list" role="list"></div>
+        <p id="orphan-quarantine-status" class="toast-area" role="status" aria-live="polite"></p>
       </section>
     </main>
 
