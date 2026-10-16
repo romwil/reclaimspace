@@ -33,6 +33,12 @@ ENV_TO_FIELD = {
 
 FIELD_TO_ENV = {value: key for key, value in ENV_TO_FIELD.items()}
 
+# Configuration is the editor for these. A non-empty value stored in
+# settings.json wins over the container environment. Unraid templates export
+# UNRAID_API_URL (often the default, without the port the UI saved) and
+# UNRAID_API_KEY (often blank).
+_SAVED_OVER_ENV = frozenset({"unraid_api_url", "unraid_api_key"})
+
 
 @dataclass
 class Settings:
@@ -124,16 +130,44 @@ class Settings:
         path.write_text(json.dumps(asdict(self), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _is_blank(value: object) -> bool:
+    return not str(value or "").strip()
+
+
 def load_merged_settings(data_dir: Path) -> Settings:
-    """Load settings file, then apply environment overrides for set env vars only."""
+    """Load settings.json, then apply environment overrides.
+
+    A name that is absent from the environment is not an overlay. A blank
+    value does not replace a non-empty stored value. Container templates often
+    export ``UNRAID_API_KEY`` and similar names as empty strings.
+
+    ``unraid_api_url`` and ``unraid_api_key`` saved in settings.json are kept
+    when they are non-empty, so the template default URL cannot hide a URL
+    saved on Configuration. A non-empty environment value still fills either
+    field when settings.json does not store one.
+    """
     settings_path = data_dir / "settings.json"
+    explicit: set[str] = set()
+    if settings_path.exists():
+        loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            explicit = set(loaded)
     settings = Settings.load(settings_path)
     merged = asdict(settings)
     for env_name, field_name in ENV_TO_FIELD.items():
         if env_name not in os.environ:
             continue
-        merged[field_name] = os.environ[env_name]
-    if "TV_PAGE_SIZE" in os.environ:
+        env_value = os.environ[env_name]
+        if _is_blank(env_value):
+            continue
+        if (
+            field_name in _SAVED_OVER_ENV
+            and field_name in explicit
+            and not _is_blank(merged.get(field_name))
+        ):
+            continue
+        merged[field_name] = env_value
+    if "TV_PAGE_SIZE" in os.environ and not _is_blank(os.environ["TV_PAGE_SIZE"]):
         merged["tv_page_size"] = int(os.environ["TV_PAGE_SIZE"])
     return Settings.from_mapping(merged)
 

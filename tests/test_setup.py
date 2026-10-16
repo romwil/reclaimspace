@@ -26,6 +26,14 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(merged["plex_token"], "secret")
         self.assertEqual(merged["radarr_api_key"], "r")
 
+    def test_merge_secret_fields_keeps_blank_unraid_key_and_writes_new_key(self) -> None:
+        existing = Settings(unraid_api_key="stored-key", unraid_api_url="http://tower/graphql")
+        kept = merge_secret_fields({"unraid_api_key": "", "unraid_api_url": "http://tower/graphql"}, existing)
+        self.assertEqual(kept["unraid_api_key"], "stored-key")
+        self.assertEqual(kept["unraid_api_url"], "http://tower/graphql")
+        replaced = merge_secret_fields({"unraid_api_key": "new-key"}, existing)
+        self.assertEqual(replaced["unraid_api_key"], "new-key")
+
     def test_build_setup_status_not_ready_without_sections(self) -> None:
         settings = Settings(
             plex_url="http://plex",

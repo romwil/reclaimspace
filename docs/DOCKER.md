@@ -72,6 +72,8 @@ Appdata reads container mounts, then works on the filesystem mounts above. Host 
 
 On Unraid 7.2+, set the Unraid API URL and key under **Configuration → Appdata**. Create the key with only `DOCKER:READ_ANY`. That permission lists containers and their mounts, including stopped containers, which is all this scan reads.
 
+Save writes both values into `settings.json`. After you reload Configuration, the URL is still filled in and the key field shows that a key is saved; you do not retype it. A blank `UNRAID_API_KEY` in the container does not erase that key. A URL saved here is the one Appdata uses, including when the container still has the template's default `UNRAID_API_URL`. A variable that is unset is not treated as blank, and a blank variable does not clear any other non-empty saved setting.
+
 **Test Unraid API** sends one read, `docker { containers { id } }`, and reports reachable, unauthorized, or the container count. It does not return mounts.
 
 ### Docker socket fallback
@@ -101,7 +103,7 @@ If neither the Unraid API nor an explicit socket is available, the scan fails. I
 ```bash
 docker pull romwil/reclaimspace:latest
 # or a pinned release:
-docker pull romwil/reclaimspace:1.4.0
+docker pull romwil/reclaimspace:1.4.1
 ```
 
 Publishing new tags is documented in [RELEASE.md](RELEASE.md).
