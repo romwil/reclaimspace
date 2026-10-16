@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.4] - 2026-10-16
+
+### Fixed
+
+- Appdata **Remove empty folders** removes a top-level folder when it has no files anywhere inside it. Empty subfolders are not treated as content and are removed with the folder. A symlink, socket, or pipe counts as content and is not followed. `_archive` and any folder a container still mounts are left in place. The page states how many folders were removed, including zero, writes out a read or delete error, and loads the scan again. The buttons come back when the action finishes or fails.
+
 ## [1.4.3] - 2026-10-16
 
 ### Fixed

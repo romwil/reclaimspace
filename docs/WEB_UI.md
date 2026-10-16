@@ -70,7 +70,7 @@ Each candidate has a checkbox, the folder name, and the total size. **Select all
 - **Migrate** — selected **Code** rows only. Moves `/appdata/<name>` to `/code/<name>`. The confirmation lists source, destination, size, and evidence. The page then shows which folder is moving and restores the buttons when the move finishes or fails, including the reason a folder was refused. The move is refused when the destination already exists, the source is already gone, or a container mounts the folder. Nothing is merged into an existing destination. Migrate does not write an Appdata quarantine entry, and this page cannot restore it.
 - **Quarantine** — moves the selected folders to `appdata/_archive/<name>`. If that name is already there, a timestamp is appended. Restore for these folders is the archive panel on this page.
 - **Delete** — permanently deletes the selected folders after a confirmation that names each one.
-- **Remove empty folders** — separate from the checkboxes. Removes top-level directories that contain nothing, skipping `_archive` and any folder a container still mounts.
+- **Remove empty folders** — separate from the checkboxes. Removes a top-level directory when it has no files anywhere inside it. Empty subfolders are removed with that folder. Sockets, pipes, and symlinks count as content and are not followed. `_archive` and any folder a container still mounts are left in place. The page says how many folders were removed, including zero, and loads the scan again. A read or delete error stays on the page.
 
 ### Archive
 

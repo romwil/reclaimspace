@@ -796,23 +796,117 @@ class FilesystemActionTests(unittest.TestCase):
             root = Path(tmp)
             (root / "empty").mkdir()
             (root / "mounted").mkdir()
+            (root / "mounted" / "downloads").mkdir()
             (root / "full").mkdir()
             (root / "full" / "file.txt").write_text("x", encoding="utf-8")
             nested = root / "nested"
-            nested.mkdir()
-            (nested / "child").mkdir()
+            (nested / "child" / "grand").mkdir(parents=True)
             archive = root / ARCHIVE_NAME
-            archive.mkdir()
-            mounts = [_mount("radarr", "/mnt/cache/appdata/mounted")]
+            (archive / "old").mkdir(parents=True)
+            mounts = [_mount("radarr", "/mnt/cache/appdata/mounted/downloads")]
 
-            removed = remove_empty_top_level(root, mounts, PREFIXES)
+            result = remove_empty_top_level(root, mounts, PREFIXES)
 
-            self.assertEqual(removed, ["empty"])
+            self.assertEqual(result["removed"], ["empty", "nested"])
+            self.assertEqual(result["skipped_in_use"], 1)
+            self.assertEqual(result["errors"], [])
             self.assertFalse((root / "empty").exists())
-            self.assertTrue((root / "mounted").is_dir())
+            self.assertFalse(nested.exists())
+            self.assertTrue((root / "mounted" / "downloads").is_dir())
             self.assertTrue((root / "full" / "file.txt").is_file())
-            self.assertTrue((nested / "child").is_dir())
-            self.assertTrue(archive.is_dir())
+            self.assertTrue((archive / "old").is_dir())
+
+    def test_empty_sweep_keeps_folders_that_contain_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            deep = root / "deep" / "a" / "b"
+            deep.mkdir(parents=True)
+            (deep / "file.txt").write_text("", encoding="utf-8")
+            hidden = root / "hidden"
+            hidden.mkdir()
+            (hidden / ".keep").write_text("x", encoding="utf-8")
+            (root / "blank").mkdir()
+
+            result = remove_empty_top_level(root, [], PREFIXES)
+
+            self.assertEqual(result["removed"], ["blank"])
+            self.assertEqual(result["skipped_in_use"], 0)
+            self.assertTrue((deep / "file.txt").is_file())
+            self.assertTrue((hidden / ".keep").is_file())
+            self.assertFalse((root / "blank").exists())
+
+    def test_empty_sweep_does_not_follow_symlinks_or_remove_special_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            (outside / "precious.txt").write_text("safe", encoding="utf-8")
+            linked = root / "linked"
+            linked.mkdir()
+            (linked / "empty").mkdir()
+            (linked / "out").symlink_to(outside, target_is_directory=True)
+            piped = root / "piped"
+            piped.mkdir()
+            os.mkfifo(piped / "queue")
+            sock_dir = root / "socked"
+            sock_dir.mkdir()
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.addCleanup(sock.close)
+            sock.bind(str(sock_dir / "app.sock"))
+
+            result = remove_empty_top_level(root, [], PREFIXES)
+
+            self.assertEqual(result["removed"], [])
+            self.assertEqual(result["errors"], [])
+            self.assertEqual((outside / "precious.txt").read_text(encoding="utf-8"), "safe")
+            self.assertTrue((linked / "empty").is_dir())
+            self.assertTrue((linked / "out").is_symlink())
+            self.assertTrue((piped / "queue").exists())
+            self.assertTrue((sock_dir / "app.sock").exists())
+
+    def test_empty_sweep_reports_a_remove_error_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a-empty").mkdir()
+            (root / "b-empty").mkdir()
+            real_rmdir = os.rmdir
+
+            def flaky(path: str) -> None:
+                if Path(path).name == "a-empty":
+                    raise OSError(errno.EACCES, "Permission denied", path)
+                real_rmdir(path)
+
+            with mock.patch("reclaimspace.appdata.os.rmdir", side_effect=flaky):
+                result = remove_empty_top_level(root, [], PREFIXES)
+
+            self.assertEqual(result["removed"], ["b-empty"])
+            self.assertEqual(len(result["errors"]), 1)
+            self.assertEqual(result["errors"][0]["name"], "a-empty")
+            self.assertIn("Permission denied", result["errors"][0]["error"])
+            self.assertTrue((root / "a-empty").is_dir())
+            self.assertFalse((root / "b-empty").exists())
+
+    def test_empty_route_accepts_a_request_without_a_body(self) -> None:
+        from reclaimspace.web import app as app_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "empty").mkdir()
+            (root / "nested" / "child").mkdir(parents=True)
+            settings = Settings(
+                appdata_root=str(root),
+                appdata_host_prefixes=";".join(PREFIXES),
+            )
+            with (
+                mock.patch.object(app_module, "load_merged_settings", return_value=settings),
+                mock.patch.object(app_module, "fetch_mounts", return_value=[]),
+            ):
+                body = app_module.appdata_empty()
+
+            self.assertEqual(body["removed"], ["empty", "nested"])
+            self.assertEqual(body["skipped_in_use"], 0)
+            self.assertEqual(body["errors"], [])
+            self.assertFalse((root / "nested").exists())
 
 
 if __name__ == "__main__":
