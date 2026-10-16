@@ -11,10 +11,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from reclaimspace.appdata import ContainerMount
 from reclaimspace.web import app as app_module
+from reclaimspace.web.app import AppdataNamesPayload, appdata_migrate, appdata_migrate_status
 
 _ENV_KEYS = (
     "APPDATA_ROOT",
@@ -28,13 +29,11 @@ _ENV_KEYS = (
 _ROOT = Path(__file__).resolve().parents[1]
 
 
-def _wait_job(client: TestClient, job_id: str, timeout: float = 5) -> dict[str, object]:
+def _wait_job(job_id: str, timeout: float = 5) -> dict[str, object]:
     deadline = time.monotonic() + timeout
     last: dict[str, object] = {}
     while time.monotonic() < deadline:
-        response = client.get(f"/api/appdata/migrate/{job_id}")
-        response.raise_for_status()
-        last = response.json()
+        last = appdata_migrate_status(job_id)
         if last.get("status") in {"completed", "failed"}:
             return last
         time.sleep(0.02)
@@ -66,7 +65,12 @@ class MigrateApiTests(unittest.TestCase):
             name = list(kwargs["names"])[0]  # type: ignore[index]
             return {
                 "migrated": [
-                    {"name": name, "destination": "/code/" + str(name), "manifest": "m", "evidence": []}
+                    {
+                        "name": name,
+                        "destination": "/code/" + str(name),
+                        "manifest": "m",
+                        "evidence": [],
+                    }
                 ],
                 "errors": [],
             }
@@ -83,33 +87,29 @@ class MigrateApiTests(unittest.TestCase):
         with (
             mock.patch.object(app_module, "fetch_mounts", return_value=[]),
             mock.patch.object(app_module, "migrate_workspace", side_effect=blocked),
-            TestClient(app_module.app) as client,
         ):
             started = time.monotonic()
-            response = client.post("/api/appdata/migrate", json={"names": ["tool"]})
+            body = appdata_migrate(AppdataNamesPayload(names=["tool"]))
             elapsed = time.monotonic() - started
             self.assertLess(elapsed, 1.5)
-            self.assertEqual(response.status_code, 200)
-            body = response.json()
             self.assertEqual(set(body), {"job_id"})
             self.assertNotIn("migrated", body)
             self.assertTrue(entered.wait(2))
-            status = client.get(f"/api/appdata/migrate/{body['job_id']}")
-            progress = status.json()
+            progress = appdata_migrate_status(body["job_id"])
             self.assertEqual(progress["status"], "running")
             self.assertEqual(progress["progress"]["current"], "tool")
             self.assertEqual(progress["progress"]["index"], 1)
             self.assertEqual(progress["progress"]["total"], 1)
             release.set()
-            finished = _wait_job(client, body["job_id"])
+            finished = _wait_job(body["job_id"])
             self.assertEqual(finished["status"], "completed")
             self.assertEqual(finished["result"]["migrated"][0]["name"], "tool")
 
     def test_completed_job_reports_migrated_names(self) -> None:
-        with self._client_and_tree() as (client, root, code, _data):
-            response = client.post("/api/appdata/migrate", json={"names": ["tool"]})
-            self.assertEqual(response.status_code, 200)
-            finished = _wait_job(client, response.json()["job_id"])
+        with self._tree() as (root, code, _data):
+            with mock.patch.object(app_module, "fetch_mounts", return_value=[]):
+                body = appdata_migrate(AppdataNamesPayload(names=["tool"]))
+                finished = _wait_job(body["job_id"])
             self.assertEqual(finished["status"], "completed")
             self.assertIsNone(finished["error"])
             self.assertEqual(finished["result"]["errors"], [])
@@ -121,9 +121,10 @@ class MigrateApiTests(unittest.TestCase):
             self.assertFalse((root / "_archive").exists())
 
     def test_engine_failure_marks_the_job_failed(self) -> None:
-        with self._client_and_tree(occupied=True) as (client, root, code, _data):
-            response = client.post("/api/appdata/migrate", json={"names": ["tool"]})
-            finished = _wait_job(client, response.json()["job_id"])
+        with self._tree(occupied=True) as (root, code, _data):
+            with mock.patch.object(app_module, "fetch_mounts", return_value=[]):
+                body = appdata_migrate(AppdataNamesPayload(names=["tool"]))
+                finished = _wait_job(body["job_id"])
             self.assertEqual(finished["status"], "failed")
             self.assertIn("exists", str(finished["error"]))
             self.assertEqual(finished["result"]["migrated"], [])
@@ -139,10 +140,9 @@ class MigrateApiTests(unittest.TestCase):
         with (
             mock.patch.object(app_module, "fetch_mounts", return_value=[]),
             mock.patch.object(app_module, "migrate_workspace", side_effect=explode),
-            TestClient(app_module.app) as client,
         ):
-            response = client.post("/api/appdata/migrate", json={"names": ["tool"]})
-            finished = _wait_job(client, response.json()["job_id"])
+            body = appdata_migrate(AppdataNamesPayload(names=["tool"]))
+            finished = _wait_job(body["job_id"])
 
         self.assertEqual(finished["status"], "failed")
         self.assertEqual(finished["error"], "tool: disk full")
@@ -152,7 +152,7 @@ class MigrateApiTests(unittest.TestCase):
         entered = threading.Event()
         release = threading.Event()
 
-        def blocked(**kwargs: object) -> dict[str, list]:
+        def blocked(**_kwargs: object) -> dict[str, list]:
             entered.set()
             self.assertTrue(release.wait(5))
             return {"migrated": [], "errors": []}
@@ -161,20 +161,19 @@ class MigrateApiTests(unittest.TestCase):
         with (
             mock.patch.object(app_module, "fetch_mounts", return_value=[]),
             mock.patch.object(app_module, "migrate_workspace", side_effect=blocked),
-            TestClient(app_module.app) as client,
         ):
-            first = client.post("/api/appdata/migrate", json={"names": ["tool"]})
-            self.assertEqual(first.status_code, 200)
+            first = appdata_migrate(AppdataNamesPayload(names=["tool"]))
+            self.assertIn("job_id", first)
             self.assertTrue(entered.wait(2))
-            second = client.post("/api/appdata/migrate", json={"names": ["tool", "other"]})
-            self.assertEqual(second.status_code, 409)
-            self.assertIn("tool", second.json()["detail"])
-            other = client.post("/api/appdata/migrate", json={"names": ["other"]})
-            self.assertEqual(other.status_code, 200)
-            self.assertIn("job_id", other.json())
+            with self.assertRaises(HTTPException) as caught:
+                appdata_migrate(AppdataNamesPayload(names=["tool", "other"]))
+            self.assertEqual(caught.exception.status_code, 409)
+            self.assertIn("tool", str(caught.exception.detail))
+            other = appdata_migrate(AppdataNamesPayload(names=["other"]))
+            self.assertIn("job_id", other)
             release.set()
-            _wait_job(client, first.json()["job_id"])
-            _wait_job(client, other.json()["job_id"])
+            _wait_job(first["job_id"])
+            _wait_job(other["job_id"])
 
     def test_refetch_per_folder_and_one_failure_is_not_success(self) -> None:
         calls = {"n": 0}
@@ -185,13 +184,10 @@ class MigrateApiTests(unittest.TestCase):
                 return [ContainerMount("plex", "running", "/mnt/cache/appdata/second")]
             return []
 
-        with self._client_and_tree(extra=["second"]) as (client, root, code, _data):
+        with self._tree(extra=["second"]) as (root, code, _data):
             with mock.patch.object(app_module, "fetch_mounts", side_effect=fake_mounts):
-                response = client.post(
-                    "/api/appdata/migrate",
-                    json={"names": ["tool", "second"]},
-                )
-                finished = _wait_job(client, response.json()["job_id"])
+                body = appdata_migrate(AppdataNamesPayload(names=["tool", "second"]))
+                finished = _wait_job(body["job_id"])
             self.assertGreaterEqual(calls["n"], 2)
             self.assertEqual(finished["status"], "failed")
             self.assertIn("in use", str(finished["error"]))
@@ -203,9 +199,9 @@ class MigrateApiTests(unittest.TestCase):
             self.assertFalse((code / "second").exists())
 
     def test_missing_job_is_404(self) -> None:
-        with TestClient(app_module.app) as client:
-            response = client.get("/api/appdata/migrate/missing")
-        self.assertEqual(response.status_code, 404)
+        with self.assertRaises(HTTPException) as caught:
+            appdata_migrate_status("missing")
+        self.assertEqual(caught.exception.status_code, 404)
 
     def test_ui_polls_migrate_and_resets_in_finally(self) -> None:
         source = (_ROOT / "reclaimspace" / "web" / "static" / "appdata.js").read_text(
@@ -219,22 +215,17 @@ class MigrateApiTests(unittest.TestCase):
         self.assertIn("/api/appdata/migrate/", source)
         self.assertIn("async function pollMigrate", source)
 
-    def _client_and_tree(self, occupied: bool = False, extra: list[str] | None = None):
-        return _TreeClient(self, occupied=occupied, extra=extra or [])
+    def _tree(self, occupied: bool = False, extra: list[str] | None = None):
+        return _Tree(occupied=occupied, extra=extra or [])
 
 
-class _TreeClient:
-    def __init__(self, test: unittest.TestCase, occupied: bool, extra: list[str]) -> None:
-        self._test = test
+class _Tree:
+    def __init__(self, occupied: bool, extra: list[str]) -> None:
         self._occupied = occupied
         self._extra = extra
-        self._tmp = None
-        self._stack = None
+        self._tmp: tempfile.TemporaryDirectory[str] | None = None
 
-    def __enter__(self):
-        import tempfile
-        from contextlib import ExitStack
-
+    def __enter__(self) -> tuple[Path, Path, Path]:
         self._tmp = tempfile.TemporaryDirectory()
         tmp = Path(self._tmp.name)
         root = tmp / "appdata"
@@ -259,14 +250,9 @@ class _TreeClient:
         }
         (data / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
         app_module.DATA_DIR = data
-        self._stack = ExitStack()
-        self._stack.enter_context(mock.patch.object(app_module, "fetch_mounts", return_value=[]))
-        client = self._stack.enter_context(TestClient(app_module.app))
-        return client, root, code, data
+        return root, code, data
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        if self._stack is not None:
-            self._stack.close()
         if self._tmp is not None:
             self._tmp.cleanup()
 
