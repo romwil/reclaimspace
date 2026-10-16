@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.0] - 2026-10-15
+
+### Added
+
+- **Appdata** page at `/appdata` for leftover top-level folders on the appdata share. A folder is in use when any container, running or stopped, bind-mounts it. `/mnt/user/appdata/<name>` and `/mnt/cache/appdata/<name>` are the same folder. A mount of the whole share protects every folder. `_archive` is never a candidate.
+- Scan sizes unused folders in the background and lists them largest first. If the Unraid API and the optional Docker socket are both unavailable, the scan stops and does not treat folders as unused.
+- **Migrate** moves a selected code folder from `/appdata/<name>` to `/code/<name>` after confirmation. A `.git` directory, or at least two project markers, marks a folder as code. The move is refused when the destination exists or a container still mounts the folder.
+- **Quarantine** moves unused folders to `appdata/_archive/<name>` with a manifest. **Restore** moves them back and stops when the original name is occupied. **Delete** and **Purge** permanently remove the named folders after confirmation. **Remove empty folders** skips `_archive` and anything still mounted.
+- Configuration fields for the appdata root, code root, host prefixes, Unraid API URL, and a masked Unraid API key. The key should have only `DOCKER:READ_ANY`. **Test** checks that Docker can be read and does not list mounts.
+- Container mounts for `/mnt/cache/appdata` → `/appdata` and `/mnt/user/data/code` → `/code` in Compose, `docker-run.sh`, and the Unraid templates. The Docker socket is not mounted.
+
+### Changed
+
+- The header links **Media**, **Appdata**, and **Configuration**. Media still quarantines Plex duplicates and never deletes files.
+
 ## [1.3.0] - 2026-09-29
 
 ### Added

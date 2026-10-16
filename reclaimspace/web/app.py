@@ -4,16 +4,33 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import uuid
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from reclaimspace import __version__
+from reclaimspace.appdata import (
+    AppdataSourceError,
+    classify_appdata,
+    delete_folders,
+    fetch_mounts,
+    list_archive,
+    list_children,
+    migrate_workspace,
+    parse_host_prefixes,
+    purge_archive,
+    quarantine_folders,
+    remove_empty_top_level,
+    restore_archive,
+)
 from reclaimspace.config_store import Settings, load_merged_settings, save_settings
 from reclaimspace.restore import list_quarantine_manifests, restore_from_manifest
 from reclaimspace.media_duplicates import PlexClient
@@ -28,13 +45,24 @@ from reclaimspace.web.setup import (
     test_plex,
     test_radarr,
     test_sonarr,
+    test_unraid_api,
     validate_paths,
 )
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/config"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-SECRET_FIELDS = ("plex_token", "radarr_api_key", "sonarr_api_key")
+SECRET_FIELDS = ("plex_token", "radarr_api_key", "sonarr_api_key", "unraid_api_key")
+_OMITTED_SETTING_FIELDS = (
+    "appdata_root",
+    "appdata_host_prefixes",
+    "code_root",
+    "unraid_api_url",
+    "docker_socket",
+)
+
+_appdata_scans: Dict[str, Dict[str, Any]] = {}
+_appdata_scans_lock = threading.Lock()
 
 app = FastAPI(title="Reclaimspace", version=__version__)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -60,6 +88,12 @@ class SettingsPayload(BaseModel):
     schedule_dry_run_enabled: bool = False
     schedule_dry_run_interval_hours: int = Field(default=168, ge=1, le=24 * 30)
     schedule_dry_run_media_type: str = "movies"
+    appdata_root: Optional[str] = None
+    appdata_host_prefixes: Optional[str] = None
+    code_root: Optional[str] = None
+    unraid_api_url: Optional[str] = None
+    unraid_api_key: str = ""
+    docker_socket: Optional[str] = None
 
 
 class ScanRequest(BaseModel):
@@ -88,6 +122,15 @@ class SonarrTestPayload(BaseModel):
     sonarr_url: str
     sonarr_api_key: str
     tv_root: str = ""
+
+
+class UnraidTestPayload(BaseModel):
+    url: str = ""
+    key: str = ""
+
+
+class AppdataNamesPayload(BaseModel):
+    names: List[str] = Field(default_factory=list)
 
 
 class PathMappingsPayload(BaseModel):
@@ -129,6 +172,11 @@ def index() -> HTMLResponse:
 @app.get("/config", response_class=HTMLResponse)
 def config_page() -> HTMLResponse:
     return HTMLResponse((STATIC_DIR / "config.html").read_text(encoding="utf-8"))
+
+
+@app.get("/appdata", response_class=HTMLResponse)
+def appdata_page() -> HTMLResponse:
+    return HTMLResponse((STATIC_DIR / "appdata.html").read_text(encoding="utf-8"))
 
 
 @app.get("/api/health")
@@ -205,6 +253,14 @@ def setup_test_sonarr(payload: SonarrTestPayload) -> Dict[str, object]:
     return test_sonarr(payload.sonarr_url, payload.sonarr_api_key, payload.tv_root)
 
 
+@app.post("/api/setup/test/unraid")
+def setup_test_unraid(payload: UnraidTestPayload) -> Dict[str, object]:
+    key = payload.key.strip()
+    if not key:
+        key = load_merged_settings(DATA_DIR).unraid_api_key
+    return test_unraid_api(payload.url, key)
+
+
 @app.get("/api/settings")
 def get_settings() -> Dict[str, Any]:
     return _mask_settings(load_merged_settings(DATA_DIR))
@@ -214,6 +270,9 @@ def get_settings() -> Dict[str, Any]:
 def put_settings(payload: SettingsPayload) -> Dict[str, Any]:
     existing = load_merged_settings(DATA_DIR)
     merged = merge_secret_fields(payload.model_dump(), existing)
+    for field_name in _OMITTED_SETTING_FIELDS:
+        if merged.get(field_name) is None:
+            merged[field_name] = getattr(existing, field_name)
     settings = Settings.from_mapping(merged)
     if settings.onboarding_complete:
         settings.setup_wizard_pending = False
@@ -358,6 +417,162 @@ def quarantine_restore(request: RestoreRequest) -> Dict[str, object]:
         return restore_from_manifest(manifest, dry_run=request.dry_run)
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _appdata_http(action: Callable[[], Any]) -> Any:
+    try:
+        return action()
+    except AppdataSourceError as error:
+        detail = str(error).strip() or "Appdata source is unavailable."
+        raise HTTPException(status_code=503, detail=detail) from error
+    except ValueError as error:
+        detail = str(error).strip() or "Invalid appdata request."
+        raise HTTPException(status_code=400, detail=detail) from error
+
+
+def _fresh_mounts(settings: Settings) -> tuple[Any, Any]:
+    return fetch_mounts(settings), parse_host_prefixes(settings)
+
+
+def _update_appdata_scan(job_id: str, **fields: Any) -> None:
+    with _appdata_scans_lock:
+        job = _appdata_scans.get(job_id)
+        if job is not None:
+            job.update(fields)
+
+
+def _run_appdata_scan(job_id: str) -> None:
+    """Size appdata in memory. Does not write a media report."""
+    _update_appdata_scan(job_id, status="running")
+    try:
+        settings = load_merged_settings(DATA_DIR)
+        mounts, prefixes = _fresh_mounts(settings)
+        result = classify_appdata(
+            appdata_root=Path(settings.appdata_root),
+            prefixes=prefixes,
+            mounts=mounts,
+        )
+        _update_appdata_scan(
+            job_id,
+            status="completed",
+            error=None,
+            result=jsonable_encoder(result),
+        )
+    except Exception as error:  # noqa: BLE001 - returned by the scan status route
+        _update_appdata_scan(job_id, status="failed", error=str(error), result=None)
+
+
+@app.post("/api/appdata/scan")
+def appdata_scan() -> Dict[str, str]:
+    job_id = uuid.uuid4().hex[:12]
+    with _appdata_scans_lock:
+        _appdata_scans[job_id] = {"status": "queued", "error": None, "result": None}
+    threading.Thread(target=_run_appdata_scan, args=(job_id,), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/appdata/scan/{job_id}")
+def appdata_scan_status(job_id: str) -> Dict[str, Any]:
+    with _appdata_scans_lock:
+        job = _appdata_scans.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Scan not found.")
+        return {"status": job["status"], "error": job["error"], "result": job["result"]}
+
+
+@app.get("/api/appdata/browse")
+def appdata_browse(path: str = Query(default="")) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+    return _appdata_http(
+        lambda: list_children(appdata_root=Path(settings.appdata_root), relative=path)
+    )
+
+
+@app.post("/api/appdata/quarantine")
+def appdata_quarantine(payload: AppdataNamesPayload) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        mounts, prefixes = _fresh_mounts(settings)
+        return quarantine_folders(
+            appdata_root=Path(settings.appdata_root),
+            names=payload.names,
+            mounts=mounts,
+            prefixes=prefixes,
+        )
+
+    return _appdata_http(action)
+
+
+@app.post("/api/appdata/delete")
+def appdata_delete(payload: AppdataNamesPayload) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        mounts, prefixes = _fresh_mounts(settings)
+        return delete_folders(
+            appdata_root=Path(settings.appdata_root),
+            names=payload.names,
+            mounts=mounts,
+            prefixes=prefixes,
+        )
+
+    return _appdata_http(action)
+
+
+@app.post("/api/appdata/empty")
+def appdata_empty() -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        mounts, prefixes = _fresh_mounts(settings)
+        return remove_empty_top_level(
+            appdata_root=Path(settings.appdata_root),
+            mounts=mounts,
+            prefixes=prefixes,
+        )
+
+    return _appdata_http(action)
+
+
+@app.get("/api/appdata/archive")
+def appdata_archive() -> Any:
+    settings = load_merged_settings(DATA_DIR)
+    return _appdata_http(lambda: list_archive(appdata_root=Path(settings.appdata_root)))
+
+
+@app.post("/api/appdata/restore")
+def appdata_restore(payload: AppdataNamesPayload) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+    return _appdata_http(
+        lambda: restore_archive(appdata_root=Path(settings.appdata_root), names=payload.names)
+    )
+
+
+@app.post("/api/appdata/purge")
+def appdata_purge(payload: AppdataNamesPayload) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+    return _appdata_http(
+        lambda: purge_archive(appdata_root=Path(settings.appdata_root), names=payload.names)
+    )
+
+
+@app.post("/api/appdata/migrate")
+def appdata_migrate(payload: AppdataNamesPayload) -> Any:
+    settings = load_merged_settings(DATA_DIR)
+
+    def action() -> Any:
+        mounts, prefixes = _fresh_mounts(settings)
+        return migrate_workspace(
+            appdata_root=Path(settings.appdata_root),
+            code_root=Path(settings.code_root),
+            names=payload.names,
+            mounts=mounts,
+            prefixes=prefixes,
+            data_dir=DATA_DIR,
+        )
+
+    return _appdata_http(action)
 
 
 def _safe_report_path(report_name: str) -> Path:

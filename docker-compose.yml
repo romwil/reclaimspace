@@ -23,8 +23,16 @@ services:
       QUARANTINE_ROOT: ${QUARANTINE_ROOT:-/quarantine}
       PATH_MAPPINGS: ${PATH_MAPPINGS:-}
       TV_PATH_MAPPINGS: ${TV_PATH_MAPPINGS:-}
+      APPDATA_ROOT: ${APPDATA_ROOT:-/appdata}
+      APPDATA_HOST_PREFIXES: "${APPDATA_HOST_PREFIXES:-/mnt/user/appdata;/mnt/cache/appdata}"
+      CODE_ROOT: ${CODE_ROOT:-/code}
+      UNRAID_API_URL: "${UNRAID_API_URL:-http://10.10.1.202/graphql}"
+      UNRAID_API_KEY: ${UNRAID_API_KEY:-}
+      DOCKER_SOCKET: ${DOCKER_SOCKET:-}
     volumes:
       - ${CONFIG_PATH:-./config}:/config
       - ${MOVIES_PATH:-/mnt/user/data/media/movies}:/media/movies
       - ${TV_PATH:-/mnt/user/data/media/tv}:/media/tv
       - ${QUARANTINE_PATH:-/mnt/user/data/quarantine}:/quarantine
+      - ${APPDATA_PATH:-/mnt/cache/appdata}:/appdata
+      - ${CODE_PATH:-/mnt/user/data/code}:/code

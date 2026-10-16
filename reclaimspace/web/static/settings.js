@@ -44,6 +44,34 @@ const SETTINGS_GROUPS = [
       { key: "schedule_dry_run_media_type", label: "Scheduled library (movies/tv)", wide: false },
     ],
   },
+  {
+    id: "appdata",
+    title: "Appdata",
+    fields: [
+      { key: "appdata_root", label: "Appdata root", wide: true, hint: "Path inside this container. Default /appdata." },
+      {
+        key: "appdata_host_prefixes",
+        label: "Host prefixes",
+        wide: true,
+        hint: "Host paths Docker reports, separated by semicolons.",
+      },
+      { key: "code_root", label: "Code root", wide: true, hint: "Destination for migrated workspaces. Default /code." },
+      { key: "unraid_api_url", label: "Unraid API URL", wide: true, hint: "GraphQL endpoint." },
+      {
+        key: "unraid_api_key",
+        label: "Unraid API key",
+        wide: false,
+        secret: true,
+        hint: "DOCKER:READ_ANY. Leave blank to keep the saved key.",
+      },
+      {
+        key: "docker_socket",
+        label: "Docker socket",
+        wide: true,
+        hint: "Optional fallback. Leave empty to disable.",
+      },
+    ],
+  },
 ];
 
 function allSettingsFields() {
@@ -82,11 +110,20 @@ function buildSettingsForm() {
       })
       .join("");
     const openAttr = group.open ? " open" : "";
+    const testHtml =
+      group.id === "appdata"
+        ? `<div style="grid-column: span 2">
+            <button type="button" class="btn secondary" id="test-unraid">Test Unraid API</button>
+            <div id="unraid-test-result"></div>
+          </div>`
+        : "";
     return `<details class="settings-group"${openAttr}>
       <summary>${escapeHtml(group.title)}</summary>
-      <div class="settings-grid">${fieldsHtml}</div>
+      <div class="settings-grid">${fieldsHtml}${testHtml}</div>
     </details>`;
   }).join("");
+
+  document.getElementById("test-unraid")?.addEventListener("click", testUnraidApi);
 
   settingsForm.querySelectorAll(".toggle-secret").forEach((button) => {
     button.addEventListener("click", () => {
@@ -125,6 +162,9 @@ function fillSettingsForm(settings) {
       input.checked = Boolean(settings[field.key]);
     } else {
       input.value = settings[field.key] ?? "";
+      if (field.key === "unraid_api_key") {
+        input.placeholder = settings.unraid_api_key_set ? "Saved — leave blank to keep" : "";
+      }
     }
   }
 }
@@ -152,6 +192,33 @@ async function saveSettings() {
     setToast(settingsStatus, error.message, "error");
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function testUnraidApi() {
+  const button = document.getElementById("test-unraid");
+  const el = document.getElementById("unraid-test-result");
+  const data = readSettingsForm();
+  if (button) button.disabled = true;
+  if (el) el.innerHTML = '<p class="test-result">Connecting…</p>';
+  try {
+    const result = await api("/api/setup/test/unraid", {
+      method: "POST",
+      body: JSON.stringify({
+        url: data.unraid_api_url || "",
+        key: data.unraid_api_key || "",
+      }),
+    });
+    const cls = result.ok ? "test-ok" : "test-fail";
+    if (el) {
+      el.innerHTML = `<p class="test-result ${cls}">${escapeHtml(result.message || "")}</p>`;
+    }
+  } catch (error) {
+    if (el) {
+      el.innerHTML = `<p class="test-result test-fail">${escapeHtml(error.message)}</p>`;
+    }
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 

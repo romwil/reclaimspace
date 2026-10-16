@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
@@ -116,6 +119,84 @@ def test_sonarr(sonarr_url: str, sonarr_api_key: str, tv_root: str = "") -> Chec
         return {"ok": False, "message": str(error)}
 
 
+def test_unraid_api(url: str, key: str) -> CheckResult:
+    """POST one Docker read query. Reports reachable, unauthorized, or a container count."""
+    endpoint = (url or "").strip().rstrip("/")
+    token = (key or "").strip()
+    if not endpoint or not token:
+        return {"ok": False, "message": "Unraid API URL and key are required."}
+
+    body = json.dumps({"query": "{ docker { containers { id } } }"}).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint,
+        data=body,
+        headers={"x-api-key": token, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            return {"ok": False, "message": "Unauthorized."}
+        return {
+            "ok": False,
+            "message": f"Unraid API is reachable but returned HTTP {error.code}.",
+        }
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return {"ok": False, "message": "Unraid API is not reachable."}
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"ok": False, "message": "Unraid API is reachable, but the response was not JSON."}
+
+    if not isinstance(payload, dict):
+        return {"ok": False, "message": "Unraid API is reachable, but the docker query failed."}
+
+    errors = payload.get("errors")
+    containers = _unraid_containers(payload)
+    if containers is None:
+        if _unraid_unauthorized(errors):
+            return {"ok": False, "message": "Unauthorized."}
+        return {"ok": False, "message": "Unraid API is reachable, but the docker query failed."}
+
+    count = len(containers)
+    noun = "container" if count == 1 else "containers"
+    return {"ok": True, "message": f"Connected — {count} {noun}."}
+
+
+def _unraid_containers(payload: Mapping[str, Any]) -> Optional[list]:
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+    docker = data.get("docker")
+    if not isinstance(docker, dict):
+        return None
+    containers = docker.get("containers")
+    if not isinstance(containers, list):
+        return None
+    return containers
+
+
+def _unraid_unauthorized(errors: object) -> bool:
+    if not errors:
+        return False
+    try:
+        text = json.dumps(errors).lower()
+    except TypeError:
+        text = str(errors).lower()
+    markers = (
+        "unauthorized",
+        "unauthenticated",
+        "forbidden",
+        "access denied",
+        "invalid api key",
+        "api key",
+    )
+    return any(marker in text for marker in markers)
+
+
 def build_setup_status(settings: Settings) -> Dict[str, Any]:
     path_check = validate_paths(
         settings.movies_root,
@@ -167,7 +248,7 @@ def build_setup_status(settings: Settings) -> Dict[str, Any]:
 def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict[str, Any]:
     """Keep stored secrets when the client submits blank masked fields."""
     merged = dict(incoming)
-    for field in ("plex_token", "radarr_api_key", "sonarr_api_key"):
+    for field in ("plex_token", "radarr_api_key", "sonarr_api_key", "unraid_api_key"):
         if not str(merged.get(field) or "").strip():
             merged[field] = getattr(existing, field)
     return merged

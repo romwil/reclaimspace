@@ -13,7 +13,7 @@
   <Overview>
 Find Plex movies and TV episodes with duplicate files on disk. Reclaimspace keeps the file Radarr or Sonarr manages and **quarantines** the rest (never deleted).
 
-**Web UI** on port 8777: setup wizard, dry-run scans, sortable/filterable reports, quarantine with manifests, restore preview.
+**Web UI** on port 8777: setup wizard, dry-run scans, sortable/filterable reports, quarantine with manifests, restore preview, and an Appdata page for leftover folders.
   </Overview>
   <Description>
 Reclaimspace finds duplicate Plex movies and TV episodes, keeps the file Radarr or Sonarr manages, and **quarantines** the rest. Nothing is deleted—files move to a timestamped folder with a rollback manifest.
@@ -23,6 +23,7 @@ Reclaimspace finds duplicate Plex movies and TV episodes, keeps the file Radarr 
 2. Complete the **setup wizard**, or open **Configuration** at `/config` if you already have settings.
 3. Confirm container paths: Movies `/media/movies`, TV `/media/tv`, Quarantine `/quarantine` (must match your volume mappings).
 4. Run a **movies dry run**, review the sortable report grid, then **quarantine** when ready.
+5. For leftover appdata folders, open **/appdata**. Mount Appdata at `/appdata` and Code at `/code`. Create an Unraid API key with only `DOCKER:READ_ANY`. Do not mount the Docker socket. Media still never deletes files. Appdata Delete and Purge are permanent and ask you to confirm each folder.
 
 **Requirements:** Plex plus Radarr (movies) and/or Sonarr (TV) on your network. The UI has no built-in login—use on a trusted LAN or behind an authenticated reverse proxy.
 
@@ -39,6 +40,8 @@ Reclaimspace finds duplicate Plex movies and TV episodes, keeps the file Radarr 
   <Config Name="Movies library" Target="/media/movies" Default="/mnt/user/data/media/movies" Mode="rw" Description="Host movie library (set Movies root to /media/movies in Configuration)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/movies</Config>
   <Config Name="TV library" Target="/media/tv" Default="/mnt/user/data/media/tv" Mode="rw" Description="Host TV library (set TV root to /media/tv in Configuration)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/media/tv</Config>
   <Config Name="Quarantine" Target="/quarantine" Default="/mnt/user/data/quarantine" Mode="rw" Description="Where duplicate files are moved" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/quarantine</Config>
+  <Config Name="Appdata" Target="/appdata" Default="/mnt/cache/appdata" Mode="rw" Description="Host appdata share (set Appdata root to /appdata in Configuration)" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata</Config>
+  <Config Name="Code" Target="/code" Default="/mnt/user/data/code" Mode="rw" Description="Workspace destination (set Code root to /code in Configuration)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/data/code</Config>
   <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex URL (also editable in web UI)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex token" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Optional seed: Radarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
@@ -48,4 +51,10 @@ Reclaimspace finds duplicate Plex movies and TV episodes, keeps the file Radarr 
   <Config Name="MOVIES_ROOT" Target="MOVIES_ROOT" Default="/media/movies" Mode="" Description="Movies root inside container" Type="Variable" Display="advanced" Required="false" Mask="false">/media/movies</Config>
   <Config Name="TV_ROOT" Target="TV_ROOT" Default="/media/tv" Mode="" Description="TV root inside container" Type="Variable" Display="advanced" Required="false" Mask="false">/media/tv</Config>
   <Config Name="QUARANTINE_ROOT" Target="QUARANTINE_ROOT" Default="/quarantine" Mode="" Description="Quarantine root inside container" Type="Variable" Display="advanced" Required="false" Mask="false">/quarantine</Config>
+  <Config Name="APPDATA_ROOT" Target="APPDATA_ROOT" Default="/appdata" Mode="" Description="Appdata root inside the container" Type="Variable" Display="advanced" Required="false" Mask="false">/appdata</Config>
+  <Config Name="APPDATA_HOST_PREFIXES" Target="APPDATA_HOST_PREFIXES" Default="/mnt/user/appdata;/mnt/cache/appdata" Mode="" Description="Host paths Docker reports for the appdata share, separated by semicolons" Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/appdata;/mnt/cache/appdata</Config>
+  <Config Name="CODE_ROOT" Target="CODE_ROOT" Default="/code" Mode="" Description="Code workspace root inside the container" Type="Variable" Display="advanced" Required="false" Mask="false">/code</Config>
+  <Config Name="UNRAID_API_URL" Target="UNRAID_API_URL" Default="http://10.10.1.202/graphql" Mode="" Description="Unraid GraphQL endpoint" Type="Variable" Display="advanced" Required="false" Mask="false">http://10.10.1.202/graphql</Config>
+  <Config Name="UNRAID_API_KEY" Target="UNRAID_API_KEY" Default="" Mode="" Description="Optional seed: Unraid API key with DOCKER:READ_ANY (also editable in Configuration)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="DOCKER_SOCKET" Target="DOCKER_SOCKET" Default="" Mode="" Description="Optional Docker socket path inside the container. Leave empty to disable. Do not mount docker.sock unless you accept full Docker API access." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 </Container>

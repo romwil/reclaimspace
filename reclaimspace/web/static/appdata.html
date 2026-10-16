@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Appdata · Reclaimspace</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="appdata">
+    <header class="header">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">RS</div>
+        <div>
+          <h1>Reclaimspace</h1>
+          <p>Plex duplicates and unused appdata · protect Radarr &amp; Sonarr files</p>
+        </div>
+      </div>
+      <nav class="top-nav" aria-label="Main">
+        <a href="/" class="nav-link" data-nav="dashboard">Media</a>
+        <a href="/appdata" class="nav-link" data-nav="appdata">Appdata</a>
+        <a href="/config" class="nav-link" data-nav="config">Configuration</a>
+      </nav>
+      <div class="header-actions">
+        <button type="button" id="open-setup-wizard" class="btn secondary btn-sm" title="Re-run first-time setup">
+          Setup wizard
+        </button>
+        <a id="setup-health" class="setup-health hidden" href="/config" title="Setup status"></a>
+        <div id="health" class="health-pill" role="status">
+          <span class="health-dot"></span>
+          <span class="health-text">Checking…</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card span-2 card-scan" aria-labelledby="appdata-scan-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="appdata-scan-heading">Scan appdata</h2>
+            <p class="card-subtitle">Reads container mounts, then sizes leftover top-level folders.</p>
+          </div>
+        </div>
+        <div class="scan-panel">
+          <div class="scan-actions">
+            <button type="button" id="scan-appdata" class="btn btn-scan dry">
+              <span class="btn-icon" aria-hidden="true">◎</span>
+              <span id="scan-appdata-label">Scan</span>
+            </button>
+          </div>
+        </div>
+        <p class="safety-note warn">
+          <strong>Delete and Purge are permanent.</strong>
+          Quarantine moves folders into <code>_archive</code>. Media scans never delete files.
+        </p>
+        <p id="appdata-status" class="toast-area" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card span-2" aria-labelledby="candidates-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="candidates-heading">Unused folders</h2>
+            <p class="card-subtitle">Largest first. Check folders to migrate, quarantine, or delete.</p>
+          </div>
+        </div>
+        <div id="appdata-summary" class="report-summary hidden"></div>
+        <div class="appdata-toolbar">
+          <button type="button" id="select-all-candidates" class="btn ghost btn-sm">Select all</button>
+          <button type="button" id="select-none-candidates" class="btn ghost btn-sm">Select none</button>
+          <button type="button" id="migrate-selected" class="btn secondary btn-sm" disabled>Migrate</button>
+          <button type="button" id="quarantine-selected" class="btn secondary btn-sm" disabled>Quarantine</button>
+          <button type="button" id="delete-selected" class="btn danger btn-sm" disabled>Delete</button>
+          <span class="appdata-toolbar-gap" aria-hidden="true"></span>
+          <button type="button" id="remove-empty" class="btn ghost btn-sm">Remove empty folders</button>
+        </div>
+        <div id="candidate-list" class="appdata-list" role="list"></div>
+      </section>
+
+      <section class="card span-2" aria-labelledby="in-use-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="in-use-heading">In use</h2>
+            <p class="card-subtitle">Folders a container bind-mounts, running or stopped, with those container names.</p>
+          </div>
+        </div>
+        <div id="in-use-list" class="appdata-list" role="list"></div>
+      </section>
+
+      <section class="card span-2" aria-labelledby="archive-heading">
+        <div class="card-header">
+          <div>
+            <h2 id="archive-heading">Archive</h2>
+            <p class="card-subtitle">Folders in <code>_archive</code>. Restore and Purge are separate.</p>
+          </div>
+          <button type="button" id="refresh-archive" class="btn ghost btn-sm" title="Refresh archive">↻</button>
+        </div>
+        <div class="appdata-toolbar">
+          <button type="button" id="select-all-archive" class="btn ghost btn-sm">Select all</button>
+          <button type="button" id="select-none-archive" class="btn ghost btn-sm">Select none</button>
+          <button type="button" id="restore-selected" class="btn secondary btn-sm" disabled>Restore</button>
+          <button type="button" id="purge-selected" class="btn danger btn-sm" disabled>Purge</button>
+        </div>
+        <div id="archive-list" class="appdata-list" role="list"></div>
+        <p id="archive-status" class="toast-area" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Delete and Purge remove folders permanently. Media scans never delete files.</p>
+    </footer>
+
+    <script src="/static/common.js"></script>
+    <script src="/static/appdata.js"></script>
+  </body>
+</html>
